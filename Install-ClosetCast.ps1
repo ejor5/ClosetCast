@@ -42,6 +42,9 @@ function Install-WithWinget {
 
   if (Read-YesNo "$DisplayName is missing. Install it with winget now?" $true) {
     winget install --id $PackageId --exact --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+      throw "$DisplayName install failed with exit code $LASTEXITCODE."
+    }
   }
 }
 
@@ -80,17 +83,29 @@ function Install-RepoArchive {
   $zipPath = Join-Path $tempRoot "closetcast.zip"
   $extractPath = Join-Path $tempRoot "extract"
 
-  New-Item -ItemType Directory -Force -Path $tempRoot, $extractPath | Out-Null
-  Write-Host "Downloading ClosetCast from $zipUrl"
-  Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
+  try {
+    New-Item -ItemType Directory -Force -Path $tempRoot, $extractPath | Out-Null
+    Write-Host "Downloading ClosetCast from $zipUrl"
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
 
-  $source = Get-ChildItem -LiteralPath $extractPath -Directory | Select-Object -First 1
-  if ($null -eq $source) { throw "Downloaded archive did not contain a project folder." }
+    $source = Get-ChildItem -LiteralPath $extractPath -Directory | Select-Object -First 1
+    if ($null -eq $source) { throw "Downloaded archive did not contain a project folder." }
 
-  New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-  Copy-Item -LiteralPath (Join-Path $source.FullName "*") -Destination $TargetDir -Recurse -Force
-  Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
+    $items = Get-ChildItem -LiteralPath $source.FullName -Force
+    foreach ($item in $items) {
+      Copy-Item -LiteralPath $item.FullName -Destination $TargetDir -Recurse -Force
+    }
+
+    if (!(Test-Path -LiteralPath (Join-Path $TargetDir "package.json"))) {
+      throw "Install copy failed: package.json was not found in $TargetDir."
+    }
+  } finally {
+    if (Test-Path -LiteralPath $tempRoot) {
+      Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    }
+  }
 }
 
 function New-DesktopShortcut {
@@ -140,13 +155,27 @@ if ((Test-Path -LiteralPath $InstallDir) -and !(Read-YesNo "ClosetCast already e
 
 Push-Location $InstallDir
 try {
+  if (!(Test-Path -LiteralPath (Join-Path $InstallDir "package.json"))) {
+    throw "ClosetCast files are incomplete in $InstallDir. Rerun this installer and answer Y when asked to update files in place."
+  }
+
   Write-Host "Installing app dependencies..."
   & $npmCommand install
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm install failed with exit code $LASTEXITCODE."
+  }
 
   if (!$SkipSetup) {
     Write-Host ""
     Write-Host "Starting setup wizard. Paste camera and calendar links when prompted."
-    & (Join-Path $InstallDir "Setup-ClosetCast.cmd")
+    $setupScript = Join-Path $InstallDir "Setup-ClosetCast.cmd"
+    if (!(Test-Path -LiteralPath $setupScript)) {
+      throw "Setup wizard was not found at $setupScript."
+    }
+    & $setupScript
+    if ($LASTEXITCODE -ne 0) {
+      throw "Setup wizard failed with exit code $LASTEXITCODE."
+    }
   }
 
   if (Read-YesNo "Create a Desktop shortcut for ClosetCast?" $true) {

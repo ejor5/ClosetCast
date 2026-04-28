@@ -40,6 +40,40 @@ function Test-CommandExists {
   return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Find-CommandPath {
+  param([string]$Name)
+  $command = Get-Command $Name -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+  return $null
+}
+
+function Find-FfmpegPath {
+  if (![string]::IsNullOrWhiteSpace($env:CLOSETCAST_FFMPEG_PATH) -and (Test-Path -LiteralPath $env:CLOSETCAST_FFMPEG_PATH)) {
+    return (Resolve-Path -LiteralPath $env:CLOSETCAST_FFMPEG_PATH).Path
+  }
+
+  $commandPath = Find-CommandPath "ffmpeg"
+  if (![string]::IsNullOrWhiteSpace($commandPath)) {
+    return $commandPath
+  }
+
+  $roots = @(
+    "$env:LOCALAPPDATA\Microsoft\WinGet\Packages",
+    "$env:ProgramFiles",
+    "${env:ProgramFiles(x86)}"
+  ) | Where-Object { ![string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) }
+
+  foreach ($root in $roots) {
+    $match = Get-ChildItem -LiteralPath $root -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match "ffmpeg" } |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    if ($match) { return $match.FullName }
+  }
+
+  return $null
+}
+
 function Set-Camera {
   param(
     [object]$Config,
@@ -57,6 +91,40 @@ function Set-Camera {
   $camera.enabled = -not [string]::IsNullOrWhiteSpace($url)
 }
 
+function Resolve-CameraId {
+  param(
+    [object]$Config,
+    [string]$Default = "garage"
+  )
+
+  $enabled = @($Config.cameras | Where-Object { $_.enabled -ne $false } | Sort-Object priority)
+  if ($enabled.Count -eq 0) { return $Default }
+
+  Write-Host ""
+  Write-Host "Primary camera options:"
+  for ($i = 0; $i -lt $enabled.Count; $i++) {
+    Write-Host "  $($i + 1). $($enabled[$i].name) [$($enabled[$i].id)]"
+  }
+
+  while ($true) {
+    $answer = Read-Default "Primary camera number or id" $Default
+    if ($answer -eq "0") { return $Default }
+    if ($answer -match "^\d+$") {
+      $index = [int]$answer - 1
+      if ($index -ge 0 -and $index -lt $enabled.Count) {
+        return $enabled[$index].id
+      }
+    }
+
+    $match = $enabled | Where-Object {
+      $_.id -eq $answer -or $_.name -eq $answer
+    } | Select-Object -First 1
+    if ($match) { return $match.id }
+
+    Write-Host "Choose a number from the list, or paste one of the camera ids."
+  }
+}
+
 function Ensure-CalendarSlots {
   param([object]$Config)
 
@@ -69,6 +137,34 @@ function Ensure-CalendarSlots {
     }
   }
   $Config.calendar.icsUrls = $slots
+}
+
+function Normalize-CalendarUrl {
+  param([string]$Url)
+  return $Url -replace "^webcal://", "https://"
+}
+
+function Write-JsonNoBom {
+  param(
+    [string]$Path,
+    [object]$Value
+  )
+
+  $json = $Value | ConvertTo-Json -Depth 20
+  $encoding = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, $json, $encoding)
+}
+
+function Repair-ConfigEncoding {
+  param([string]$Path)
+
+  if (!(Test-Path -LiteralPath $Path)) { return }
+  $text = [System.IO.File]::ReadAllText($Path)
+  if ($text.Length -gt 0 -and [int][char]$text[0] -eq 65279) {
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $text.TrimStart([char]65279), $encoding)
+    Write-Host "Repaired config.json UTF-8 encoding."
+  }
 }
 
 $projectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
@@ -87,6 +183,7 @@ if (!(Test-Path -LiteralPath $templatePath)) {
 }
 
 if ((Test-Path -LiteralPath $configPath) -and !(Read-YesNo "config.json already exists. Replace it?" $false)) {
+  Repair-ConfigEncoding $configPath
   Write-Host "Keeping existing config.json."
 } else {
   $config = Get-Content -LiteralPath $templatePath -Raw | ConvertFrom-Json
@@ -107,7 +204,7 @@ if ((Test-Path -LiteralPath $configPath) -and !(Read-YesNo "config.json already 
   for ($i = 0; $i -lt 3; $i++) {
     $calendarUrl = Read-Default "Paste Apple Calendar $($i + 1) .ics URL, or leave blank"
     $config.calendar.icsUrls[$i].name = "Apple Calendar $($i + 1)"
-    $config.calendar.icsUrls[$i].url = $calendarUrl
+    $config.calendar.icsUrls[$i].url = Normalize-CalendarUrl $calendarUrl
     if (![string]::IsNullOrWhiteSpace($calendarUrl)) {
       $calendarEnabled = $true
     }
@@ -115,8 +212,7 @@ if ((Test-Path -LiteralPath $configPath) -and !(Read-YesNo "config.json already 
   $config.calendar.enabled = $calendarEnabled
 
   Write-Host ""
-  $primaryCamera = Read-Default "Primary camera id" "garage"
-  $config.primaryCameraId = $primaryCamera
+  $config.primaryCameraId = Resolve-CameraId $config "garage"
   $config.fullscreenOnLaunch = Read-YesNo "Start fullscreen/kiosk on launch?" $true
   $config.media.enabled = Read-YesNo "Enable local media rotation from the media folder?" $true
   $config.yankees.enabled = Read-YesNo "Enable Yankees auto mode?" $true
@@ -126,15 +222,18 @@ if ((Test-Path -LiteralPath $configPath) -and !(Read-YesNo "config.json already 
   $config.dayCycle.installBackupSleepTask = Read-YesNo "Install backup 10:30 PM sleep task?" $false
   $config.autostartOnLogin = Read-YesNo "Start ClosetCast automatically when Windows logs in?" $true
 
-  if (!(Test-CommandExists "ffmpeg")) {
+  $ffmpegPath = Find-FfmpegPath
+  if (![string]::IsNullOrWhiteSpace($ffmpegPath)) {
+    $config.ffmpegPath = $ffmpegPath
+    Write-Host "Using FFmpeg: $ffmpegPath"
+  } else {
     Write-Host ""
     Write-Host "ffmpeg was not found on PATH."
     $ffmpegPath = Read-Default "Paste full ffmpeg.exe path, or leave 'ffmpeg' if you will install it later" "ffmpeg"
     $config.ffmpegPath = $ffmpegPath
   }
 
-  $json = $config | ConvertTo-Json -Depth 20
-  Set-Content -LiteralPath $configPath -Value $json -Encoding UTF8
+  Write-JsonNoBom $configPath $config
   Write-Host ""
   Write-Host "Wrote $configPath"
 }

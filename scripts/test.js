@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { CalendarService, eventsForWindow, parseIcs } = require("../src/calendarService");
+const { CalendarService, eventsForWindow, normalizeCalendarUrl, parseIcs } = require("../src/calendarService");
 const { DayCycleService } = require("../src/dayCycleService");
 const { selectLocation } = require("../src/weatherService");
 const { findYankeesStreamLink } = require("../src/yankeesScheduler");
@@ -26,6 +26,7 @@ function testCalendarTomorrow() {
   const events = eventsForWindow(parseIcs(ics, "Test"), new Date("2026-04-29T00:00:00Z"), new Date("2026-04-30T00:00:00Z"));
   assert(events.length === 1, "calendar should return tomorrow event");
   assert(events[0].title === "School", "calendar event title should survive parsing");
+  assert(normalizeCalendarUrl("webcal://example.com/calendar.ics") === "https://example.com/calendar.ics", "webcal should normalize to https");
 }
 
 function testDayCycle() {

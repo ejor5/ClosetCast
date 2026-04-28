@@ -41,7 +41,7 @@ $settings = New-ScheduledTaskSettingsSet `
   -ExecutionTimeLimit (New-TimeSpan -Hours 0) `
   -RestartCount 3 `
   -RestartInterval (New-TimeSpan -Minutes 1)
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel LeastPrivilege
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 $wakeTask = New-ScheduledTask -Action $wakeAction -Trigger $wakeTrigger -Settings $settings -Principal $principal -Description "Wakes the laptop and starts or focuses ClosetCast."
 
 Register-ScheduledTask -TaskName $WakeTaskName -InputObject $wakeTask -Force | Out-Null

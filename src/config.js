@@ -11,7 +11,7 @@ function loadConfig() {
   const configPath = explicitPath ||
     (fs.existsSync(workingConfigPath) ? workingConfigPath : null) ||
     (fs.existsSync(localConfigPath) ? localConfigPath : DEFAULT_CONFIG_PATH);
-  const raw = fs.readFileSync(configPath, "utf8");
+  const raw = fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, "");
   const config = JSON.parse(raw);
 
   config.__configPath = configPath;

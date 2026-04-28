@@ -61,7 +61,7 @@ class CalendarService {
 
     await Promise.all(feeds.map(async (feed) => {
       try {
-        const response = await fetch(feed.url);
+        const response = await fetch(normalizeCalendarUrl(feed.url));
         if (!response.ok) throw new Error(`${feed.name || "Calendar"} returned ${response.status}`);
         const text = await response.text();
         allParsedEvents.push(...parseIcs(text, feed.name || "Calendar"));
@@ -156,6 +156,10 @@ function getCalendarWindows(now, config) {
 function getCachePath(projectRoot, config) {
   const cachePath = config.cachePath || "cache/calendar-cache.json";
   return path.isAbsolute(cachePath) ? cachePath : path.join(projectRoot, cachePath);
+}
+
+function normalizeCalendarUrl(url) {
+  return String(url || "").replace(/^webcal:\/\//i, "https://");
 }
 
 function parseIcs(text, calendarName) {
@@ -316,5 +320,6 @@ module.exports = {
   CalendarService,
   eventsForWindow,
   getCalendarWindows,
+  normalizeCalendarUrl,
   parseIcs
 };

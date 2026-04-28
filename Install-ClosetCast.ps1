@@ -57,6 +57,27 @@ function Get-NpmCommand {
   return $null
 }
 
+function Find-FfmpegPath {
+  $command = Get-Command "ffmpeg" -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+
+  $roots = @(
+    "$env:LOCALAPPDATA\Microsoft\WinGet\Packages",
+    "$env:ProgramFiles",
+    "${env:ProgramFiles(x86)}"
+  ) | Where-Object { ![string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) }
+
+  foreach ($root in $roots) {
+    $match = Get-ChildItem -LiteralPath $root -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match "ffmpeg" } |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    if ($match) { return $match.FullName }
+  }
+
+  return $null
+}
+
 function Add-CommonToolPaths {
   $paths = @(
     "C:\Program Files\nodejs",
@@ -142,9 +163,17 @@ if ($null -eq $npmCommand) {
   exit 1
 }
 
-if (!(Test-CommandExists "ffmpeg")) {
+if (!(Test-CommandExists "ffmpeg") -and [string]::IsNullOrWhiteSpace((Find-FfmpegPath))) {
   Install-WithWinget "Gyan.FFmpeg" "FFmpeg"
   Add-CommonToolPaths
+}
+
+$ffmpegPath = Find-FfmpegPath
+if (![string]::IsNullOrWhiteSpace($ffmpegPath)) {
+  $env:CLOSETCAST_FFMPEG_PATH = $ffmpegPath
+  Write-Host "Found FFmpeg: $ffmpegPath"
+} else {
+  Write-Host "FFmpeg still was not found. The setup wizard will ask for ffmpeg.exe, or you can install it later."
 }
 
 if ((Test-Path -LiteralPath $InstallDir) -and !(Read-YesNo "ClosetCast already exists here. Update files in place?" $true)) {

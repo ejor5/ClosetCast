@@ -134,7 +134,7 @@ To connect it:
 2. Paste the feed URLs into `calendar.icsUrls` in `config.json`.
 3. Set `calendar.enabled` to `true`.
 
-If no URL is configured, the app simply says calendar is not connected. Basic one-off events and common daily/weekly recurring events are supported. Calendar results are cached at `cache/calendar-cache.json`, so a temporary network failure falls back to the last good data.
+Apple often gives links that start with `webcal://`; ClosetCast accepts those and normalizes them to `https://` internally. If no URL is configured, the app simply says calendar is not connected. Basic one-off events and common daily/weekly recurring events are supported. Calendar results are cached at `cache/calendar-cache.json`, so a temporary network failure falls back to the last good data.
 
 From 10:00 PM to 10:30 PM, ClosetCast switches to wind-down mode and shows tomorrow's events from all three calendars.
 
@@ -279,6 +279,14 @@ Keep the laptop logged in or locked rather than fully signed out. The scheduled 
 
 Use `npm.cmd` instead of `npm`.
 
+**Installer says FFmpeg is missing**
+
+Rerun the one-command installer and allow FFmpeg installation if prompted. The installer now searches common WinGet install folders and passes the discovered `ffmpeg.exe` path into setup automatically. If it still cannot find FFmpeg, paste the full path to `ffmpeg.exe` when asked.
+
+**config.json JSON parse error**
+
+Older setup builds wrote `config.json` with a UTF-8 BOM. Rerun the installer and answer `n` when asked whether to replace `config.json`; setup will repair the encoding in place. The app also tolerates BOMs now.
+
 **Camera tile says reconnecting**
 
 Check `ffmpegPath`, the RTSP URL, camera credentials, and whether the laptop can reach the camera IP. The app redacts passwords in logs.
@@ -289,7 +297,7 @@ Check `yankees.enabled`, the schedule URL, and `logs/closetcast.log`. If the sch
 
 **Calendar is empty**
 
-Check `calendar.enabled` and make sure the `.ics` URLs are reachable from the laptop. Apple Calendar feeds can take a few minutes to update after you edit events. If the network is down, ClosetCast uses the local cache when available.
+Check `calendar.enabled` and make sure the `.ics` URLs are reachable from the laptop. `webcal://` Apple links are okay. Apple Calendar feeds can take a few minutes to update after you edit events. If the network is down, ClosetCast uses the local cache when available.
 
 **YouTube panel shows a search page**
 

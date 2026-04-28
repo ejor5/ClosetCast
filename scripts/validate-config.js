@@ -3,7 +3,7 @@ const path = require("path");
 
 const file = process.argv[2] || "config.json";
 const configPath = path.resolve(process.cwd(), file);
-const raw = fs.readFileSync(configPath, "utf8");
+const raw = fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, "");
 const config = JSON.parse(raw);
 const errors = [];
 

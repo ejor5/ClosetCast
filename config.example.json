@@ -1,0 +1,216 @@
+{
+  "fullscreenOnLaunch": true,
+  "autostartOnLogin": false,
+  "lowCpuMode": true,
+  "logLevel": "info",
+  "adminPin": "",
+  "cameraLayout": "five",
+  "focusedCameraId": "garage",
+  "primaryCameraId": "garage",
+  "ffmpegPath": "ffmpeg",
+  "dayCycle": {
+    "enabled": true,
+    "wakeTime": "09:00",
+    "windDownReminderTime": "22:00",
+    "sleepTime": "22:30",
+    "triggerSleepFromApp": true,
+    "installWakeTask": true,
+    "installBackupSleepTask": false,
+    "sleepScriptPath": "scripts/sleep-now.ps1"
+  },
+  "layout": {
+    "cameraAspectRatio": "7 / 8",
+    "normalPrimaryWeight": 1.52,
+    "gameStreamScreenShare": 0.75
+  },
+  "ambientYouTube": {
+    "enabled": true,
+    "startTime": "12:00",
+    "endTime": "22:00",
+    "rotationMinutes": 45,
+    "resolveRefreshHours": 12,
+    "fallbackToSearchPage": true,
+    "autoplay": true,
+    "mute": true,
+    "recentHistorySize": 4,
+    "directVideos": [
+      {
+        "title": "Disneyland park B-roll",
+        "url": "https://www.youtube.com/watch?v=9E-l9qYiqxQ&t=2725s",
+        "enabled": true
+      }
+    ],
+    "searchTopics": [
+      {
+        "title": "Mattercam live",
+        "query": "Mattercam live",
+        "enabled": true
+      },
+      {
+        "title": "Disneyland B-roll",
+        "query": "Disneyland b roll ambience",
+        "enabled": true
+      },
+      {
+        "title": "2010s Disney Channel commercials",
+        "query": "2010s Disney Channel commercials",
+        "enabled": true
+      },
+      {
+        "title": "Disney XD commercials",
+        "query": "2010s Disney XD commercials",
+        "enabled": true
+      },
+      {
+        "title": "Disney Channel Halloween commercials",
+        "query": "Disney Channel Halloween commercials 2010s",
+        "enabled": true
+      },
+      {
+        "title": "Disney Channel Christmas commercials",
+        "query": "Disney Channel Christmas commercials 2010s",
+        "enabled": true
+      },
+      {
+        "title": "Frutiger Aero ambience",
+        "query": "Frutiger Aero ambience buildings",
+        "enabled": true
+      },
+      {
+        "title": "Low poly night scenes",
+        "query": "low poly night scene ambience",
+        "enabled": true
+      }
+    ]
+  },
+  "streamServer": {
+    "host": "127.0.0.1",
+    "port": 4557
+  },
+  "cameras": [
+    {
+      "id": "garage",
+      "name": "Garage",
+      "url": "rtsp://username:password@192.168.1.101:554/cam/realmonitor?channel=1&subtype=0",
+      "enabled": true,
+      "priority": 1
+    },
+    {
+      "id": "front-yard",
+      "name": "Front Yard",
+      "url": "rtsp://username:password@192.168.1.102:554/cam/realmonitor?channel=1&subtype=0",
+      "enabled": true,
+      "priority": 2
+    },
+    {
+      "id": "back-yard",
+      "name": "Back Yard",
+      "url": "rtsp://username:password@192.168.1.103:554/cam/realmonitor?channel=1&subtype=0",
+      "enabled": true,
+      "priority": 3
+    },
+    {
+      "id": "side-yard",
+      "name": "Side Yard",
+      "url": "rtsp://username:password@192.168.1.104:554/cam/realmonitor?channel=1&subtype=0",
+      "enabled": true,
+      "priority": 4
+    },
+    {
+      "id": "ring-doorbell",
+      "name": "Ring Doorbell",
+      "url": "rtsp://username:password@192.168.1.105:554/live",
+      "enabled": true,
+      "priority": 5
+    }
+  ],
+  "media": {
+    "enabled": true,
+    "folderPath": "media",
+    "rotationSeconds": 90,
+    "showDuringCameraMode": true,
+    "allowedExtensions": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".webp",
+      ".mp4",
+      ".webm",
+      ".mov"
+    ]
+  },
+  "morningBriefing": {
+    "enabled": true,
+    "showAllDay": true,
+    "showStartHour": 5,
+    "showEndHour": 11,
+    "refreshMinutes": 30,
+    "defaultLocationId": "almaden-cambrian",
+    "locations": [
+      {
+        "id": "almaden-cambrian",
+        "name": "Almaden / Cambrian Park",
+        "latitude": 37.245,
+        "longitude": -121.91
+      },
+      {
+        "id": "los-altos",
+        "name": "Los Altos",
+        "latitude": 37.3852,
+        "longitude": -122.1141
+      }
+    ],
+    "weekdayLocationOverrides": [
+      {
+        "days": [
+          "monday",
+          "wednesday"
+        ],
+        "locationId": "los-altos",
+        "label": "School day"
+      }
+    ]
+  },
+  "calendar": {
+    "enabled": false,
+    "refreshMinutes": 15,
+    "lookAheadDays": 2,
+    "maxEvents": 5,
+    "maxTomorrowEvents": 8,
+    "cachePath": "cache/calendar-cache.json",
+    "icsUrls": [
+      {
+        "name": "Apple Calendar 1",
+        "url": ""
+      },
+      {
+        "name": "Apple Calendar 2",
+        "url": ""
+      },
+      {
+        "name": "Apple Calendar 3",
+        "url": ""
+      }
+    ]
+  },
+  "yankees": {
+    "enabled": true,
+    "teamId": 147,
+    "scheduleUrl": "https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=147&hydrate=team,linescore&date={date}",
+    "streameastUrl": "https://v2.streameast.ga/",
+    "streamSearchText": "Yankees",
+    "resolveStreamLink": true,
+    "streamLinkRefreshMinutes": 20,
+    "streamLinkPatterns": [
+      "yankees",
+      "new-york-yankees"
+    ],
+    "gameStartBufferMinutes": 20,
+    "gameEndBufferMinutes": 45,
+    "assumedGameDurationMinutes": 210,
+    "refreshScheduleMinutes": 360,
+    "prepareBeforeGameMinutes": 10,
+    "fallbackToDashboardOnError": true
+  }
+}

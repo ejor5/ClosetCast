@@ -1,0 +1,45 @@
+{
+  "name": "closetcast",
+  "version": "0.1.0",
+  "description": "A lightweight Windows kiosk closet monitor for RTSP cameras, local media, and Yankees game mode.",
+  "main": "src/main.js",
+  "author": "ClosetCast",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "lint": "node scripts/lint.js",
+    "test": "node scripts/test.js",
+    "validate:config": "node scripts/validate-config.js config.example.json",
+    "build": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.closetcast.app",
+    "productName": "ClosetCast",
+    "files": [
+      "src/**/*",
+      "config.example.json",
+      "media/.gitkeep",
+      "README.md",
+      "AGENTS.md"
+    ],
+    "extraResources": [
+      {
+        "from": "media",
+        "to": "media",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    }
+  }
+}

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClosetCast</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main id="app" class="app">
+      <section id="dashboard" class="dashboard">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">ClosetCast</p>
+            <h1 id="clock">--:--</h1>
+          </div>
+          <div class="status-stack">
+            <span id="dateLabel" class="pill">Loading</span>
+            <span id="modeStatus" class="pill accent">Dashboard</span>
+            <span id="powerStatus" class="pill">Power schedule loading</span>
+            <span id="cameraHealth" class="pill">Cameras loading</span>
+          </div>
+        </header>
+
+        <section id="stage" class="stage mode-normal">
+          <section id="cameraWall" class="camera-wall camera-mosaic"></section>
+
+          <aside id="infoRail" class="info-rail">
+            <article class="info-card weather-card">
+              <div class="card-title-row">
+                <p class="eyebrow">Weather</p>
+                <span id="weatherBadge" class="mini-pill">Loading</span>
+              </div>
+              <h2 id="weatherHeadline">Weather loading</h2>
+              <div id="weatherDetails" class="briefing-details"></div>
+            </article>
+
+            <article class="info-card calendar-card">
+              <div class="card-title-row">
+                <p class="eyebrow">Calendar</p>
+                <span id="calendarStatus" class="mini-pill">Not connected</span>
+              </div>
+              <div id="calendarEvents" class="calendar-events"></div>
+            </article>
+          </aside>
+
+          <section id="streamPanel" class="stream-panel hidden">
+            <header class="scoreboard compact-scoreboard">
+              <div>
+                <p class="eyebrow">Yankees Auto Mode</p>
+                <h2 id="gameTitle">Game time</h2>
+              </div>
+              <div class="score-cells">
+                <span id="gameStatus">Preparing</span>
+                <span id="gameTime">--</span>
+              </div>
+            </header>
+            <webview id="streamView" partition="persist:closetcast-stream" allowpopups="false"></webview>
+          </section>
+
+          <section id="ambientPanel" class="ambient-panel hidden">
+            <header class="ambient-header">
+              <div>
+                <p class="eyebrow">Ambient YouTube</p>
+                <h2 id="ambientTitle">Finding something cool</h2>
+              </div>
+              <span id="ambientStatus" class="mini-pill">After noon</span>
+            </header>
+            <webview id="ambientView" partition="persist:closetcast-youtube" allowpopups="false"></webview>
+          </section>
+
+          <section id="winddownPanel" class="winddown-panel hidden">
+            <div class="winddown-hero">
+              <p class="eyebrow">Wind-down</p>
+              <h2>Shutdown reminder</h2>
+              <p id="winddownMessage">The laptop is scheduled to sleep soon.</p>
+            </div>
+            <article class="tomorrow-card">
+              <div class="card-title-row">
+                <p class="eyebrow">Tomorrow</p>
+                <span id="tomorrowStatus" class="mini-pill">Calendar</span>
+              </div>
+              <div id="tomorrowEvents" class="tomorrow-events"></div>
+            </article>
+          </section>
+        </section>
+
+        <aside id="mediaPanel" class="media-panel hidden">
+          <div class="media-frame">
+            <img id="mediaImage" alt="" class="media-asset hidden">
+            <video id="mediaVideo" class="media-asset hidden" muted autoplay loop playsinline></video>
+          </div>
+          <p id="mediaCaption" class="media-caption"></p>
+        </aside>
+      </section>
+
+      <button id="settingsToggle" class="icon-button" title="Settings" aria-label="Settings">S</button>
+      <section id="settingsPanel" class="settings hidden" aria-label="Settings">
+        <div class="settings-header">
+          <h2>Settings</h2>
+          <button id="settingsClose" class="icon-button" title="Close" aria-label="Close">X</button>
+        </div>
+        <div class="setting-row">
+          <span>Layout</span>
+          <div class="segmented">
+            <button data-layout="focus">1</button>
+            <button data-layout="split">2</button>
+            <button data-layout="grid4">4</button>
+            <button data-layout="five">5</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span>Fullscreen</span>
+          <button id="fullscreenToggle">Toggle</button>
+        </div>
+        <div class="setting-row">
+          <span>Schedule</span>
+          <button id="refreshSchedule">Refresh</button>
+        </div>
+        <div class="setting-row">
+          <span>Config</span>
+          <button id="openConfig">Open Folder</button>
+        </div>
+        <div class="setting-row">
+          <span>Logs</span>
+          <button id="openLogs">Open Folder</button>
+        </div>
+        <p id="configPath" class="fine-print"></p>
+      </section>
+    </main>
+    <script src="./layoutEngine.js"></script>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

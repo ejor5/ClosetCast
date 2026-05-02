@@ -180,6 +180,22 @@
       }
     ]
   },
+  "traffic": {
+    "enabled": true,
+    "label": "San Jose traffic",
+    "routeLabel": "Hwy 85 / West Valley Fwy",
+    "incidentUrl": "https://cad.chp.ca.gov/Traffic.aspx",
+    "quickMapUrl": "https://quickmap.dot.ca.gov/?ll=37.25,-121.95&z=11",
+    "keywords": [
+      "SR-85",
+      "CA-85",
+      "Highway 85",
+      "West Valley",
+      "West Valley Fwy",
+      "West Valley Freeway"
+    ],
+    "maxItems": 3
+  },
   "calendar": {
     "enabled": false,
     "refreshMinutes": 15,

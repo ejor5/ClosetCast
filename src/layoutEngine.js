@@ -2,6 +2,7 @@
   function buildLayout(input) {
     const mode = input.appMode?.mode || "normal";
     const ambientActive = Boolean(input.ambient?.visible);
+    const mediaActive = Boolean(input.mediaActive);
     const requestedCameraLayout = input.cameraLayout || "five";
     const primaryCameraId = input.primaryCameraId || input.focusedCameraId;
     const cameras = orderCameras(input.cameras || [], primaryCameraId);
@@ -40,7 +41,7 @@
 
     return {
       mode: "normal",
-      stageClass: ambientActive ? "stage mode-normal has-ambient" : "stage mode-normal",
+      stageClass: ambientActive ? "stage mode-normal has-ambient" : mediaActive ? "stage mode-normal has-media" : "stage mode-normal",
       cameraClass,
       cameras: selectCameras(cameras, requestedCameraLayout),
       showStream: false,

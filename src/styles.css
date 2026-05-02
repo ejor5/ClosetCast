@@ -145,6 +145,11 @@ h1 {
   grid-template-areas: "cameras info";
 }
 
+.mode-normal.has-media {
+  grid-template-columns: minmax(150px, 0.16fr) minmax(0, 1fr) minmax(285px, 0.27fr);
+  grid-template-areas: "cameras media info";
+}
+
 .mode-normal.has-ambient {
   grid-template-columns: minmax(230px, 0.24fr) minmax(0, 1fr);
   grid-template-rows: minmax(160px, auto) minmax(0, 1fr);
@@ -262,6 +267,21 @@ h1 {
   grid-template-rows: auto auto;
 }
 
+.mode-normal.has-media .camera-wall {
+  grid-template-columns: 1fr;
+  align-content: start;
+  overflow: hidden;
+}
+
+.mode-normal.has-media .camera-mosaic .primary {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.mode-normal.has-media .camera-tile {
+  max-height: 15vh;
+}
+
 .camera-tile.offline::after {
   content: "Reconnecting";
   position: absolute;
@@ -340,18 +360,24 @@ h1 {
   margin-bottom: 8px;
 }
 
+.weather-card {
+  background:
+    linear-gradient(180deg, rgba(111, 168, 220, 0.16), transparent 42%),
+    linear-gradient(135deg, rgba(143, 201, 163, 0.12), rgba(42, 28, 19, 0.78));
+}
+
 .weather-card h2 {
-  font-size: 1.35rem;
-  margin-bottom: 10px;
+  font-size: 1.15rem;
+  margin-bottom: 12px;
+  color: var(--muted);
 }
 
 .briefing-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
 }
 
-.briefing-details span {
+.briefing-details > span {
   min-height: 30px;
   display: inline-flex;
   align-items: center;
@@ -360,6 +386,160 @@ h1 {
   border-radius: 999px;
   color: var(--ink);
   background: rgba(0, 0, 0, 0.22);
+}
+
+.weather-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(112px, 0.8fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.weather-temps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.temp-pair,
+.weather-now,
+.metric-card,
+.traffic-card {
+  border: 1px solid rgba(255, 248, 223, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.temp-pair {
+  min-height: 82px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px;
+}
+
+.temp-pair span,
+.weather-now span,
+.metric-card span,
+.traffic-route span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.temp-pair strong {
+  color: var(--gold);
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.temp-pair.low strong {
+  color: var(--blue);
+}
+
+.weather-now {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px;
+}
+
+.weather-now strong {
+  font-size: 1.18rem;
+}
+
+.weather-now small {
+  color: var(--muted);
+}
+
+.weather-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric-card {
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 9px 10px;
+}
+
+.metric-card strong {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.metric-card.rain strong {
+  color: var(--blue);
+}
+
+.metric-card.wind strong {
+  color: var(--mint);
+}
+
+.weather-error {
+  margin: 0;
+  color: var(--muted);
+}
+
+.traffic-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-color: rgba(143, 201, 163, 0.22);
+}
+
+.traffic-route {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.traffic-route strong {
+  color: var(--mint);
+}
+
+.traffic-card ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  list-style: none;
+}
+
+.traffic-card li {
+  color: var(--ink);
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
+.traffic-source {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.traffic-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--gold);
+  font-size: inherit;
+  text-decoration: none;
+}
+
+.traffic-unavailable .traffic-route strong {
+  color: var(--gold);
 }
 
 .calendar-events,
@@ -545,11 +725,12 @@ webview {
 }
 
 .media-panel {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  width: min(28vw, 360px);
-  min-width: 240px;
+  grid-area: media;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -558,7 +739,7 @@ webview {
 }
 
 .media-frame {
-  aspect-ratio: 16 / 9;
+  min-height: 0;
   background: #0d0907;
 }
 
@@ -652,6 +833,7 @@ webview {
     grid-template-rows: auto auto auto;
     grid-template-areas:
       "info"
+      "media"
       "cameras"
       "stream"
       "ambient";
@@ -686,7 +868,7 @@ webview {
     grid-template-columns: 1fr;
   }
 
-  .media-panel {
-    display: none;
+  .media-frame {
+    min-height: 42vh;
   }
 }

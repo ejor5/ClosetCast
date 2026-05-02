@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("closetCast", {
   setFullscreen: (enabled) => ipcRenderer.invoke("closetcast:set-fullscreen", enabled),
   openConfigFolder: () => ipcRenderer.invoke("closetcast:open-config-folder"),
   openLogsFolder: () => ipcRenderer.invoke("closetcast:open-logs-folder"),
+  openExternalUrl: (url) => ipcRenderer.invoke("closetcast:open-external-url", url),
   onYankeesState: (callback) => {
     ipcRenderer.on("closetcast:yankees-state", (_event, state) => callback(state));
   },

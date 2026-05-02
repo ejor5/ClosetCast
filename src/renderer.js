@@ -93,7 +93,8 @@ function renderAll(forceCameras = false) {
     cameras: state.config.cameras,
     focusedCameraId: state.focusedCameraId,
     primaryCameraId: state.config.primaryCameraId,
-    ambient: state.ambient
+    ambient: state.ambient,
+    mediaActive: isMediaActive(effectiveAppMode)
   });
 
   elements.stage.className = layout.stageClass;
@@ -179,6 +180,7 @@ function renderChrome() {
 function renderWeather() {
   const weatherState = state.weather;
   const weather = weatherState?.weather;
+  const traffic = weatherState?.traffic;
 
   if (!weatherState?.enabled) {
     elements.weatherBadge.textContent = "Disabled";
@@ -190,19 +192,45 @@ function renderWeather() {
   if (!weather) {
     elements.weatherBadge.textContent = "Offline";
     elements.weatherHeadline.textContent = weatherState.message || "Weather unavailable";
-    elements.weatherDetails.innerHTML = weatherState.error ? `<span>${escapeHtml(weatherState.error)}</span>` : "<span>Waiting for weather</span>";
+    elements.weatherDetails.innerHTML = [
+      `<p class="weather-error">${escapeHtml(weatherState.error || "Waiting for weather")}</p>`,
+      renderTraffic(traffic)
+    ].join("");
     return;
   }
 
-  elements.weatherBadge.textContent = weather.label || "Today";
+  elements.weatherBadge.textContent = weather.label || weather.condition || "Today";
   elements.weatherHeadline.textContent = weather.locationName;
-  elements.weatherDetails.innerHTML = [
-    `<span>${escapeHtml(weather.condition)}</span>`,
-    `<span>${weather.currentTemp ?? "--"}F now</span>`,
-    `<span>High ${formatMaybe(weather.high)} / Low ${formatMaybe(weather.low)}</span>`,
-    `<span>${weather.rainChance}% rain</span>`,
-    `<span>${weather.wind} mph wind</span>`
-  ].join("");
+  elements.weatherDetails.innerHTML = `
+    <div class="weather-hero">
+      <div class="weather-temps">
+        <div class="temp-pair">
+          <span>Hi</span>
+          <strong>${formatDegrees(weather.high)}</strong>
+        </div>
+        <div class="temp-pair low">
+          <span>Lo</span>
+          <strong>${formatDegrees(weather.low)}</strong>
+        </div>
+      </div>
+      <div class="weather-now">
+        <span>${escapeHtml(weather.condition)}</span>
+        <strong>${formatDegrees(weather.currentTemp)} now</strong>
+        <small>${weather.feelsLike === null || weather.feelsLike === undefined ? "" : `Feels ${formatDegrees(weather.feelsLike)}`}</small>
+      </div>
+    </div>
+    <div class="weather-metrics">
+      <div class="metric-card rain">
+        <span>Rain</span>
+        <strong>${formatPercent(weather.rainChance)}</strong>
+      </div>
+      <div class="metric-card wind">
+        <span>Wind</span>
+        <strong>${formatSpeed(weather.wind)}</strong>
+      </div>
+    </div>
+    ${renderTraffic(traffic)}
+  `;
 }
 
 function renderCalendar() {
@@ -258,7 +286,8 @@ function renderYankees() {
 }
 
 function renderMedia() {
-  const mediaEnabled = state.config.media.enabled && state.config.media.showDuringCameraMode && state.mediaFiles.length > 0 && getEffectiveAppMode().mode === "normal" && !state.ambient?.visible;
+  const mediaEnabled = isMediaActive(getEffectiveAppMode());
+  elements.dashboard.classList.toggle("has-media", mediaEnabled);
   elements.mediaPanel.classList.toggle("hidden", !mediaEnabled);
   if (!mediaEnabled) return;
 
@@ -275,6 +304,16 @@ function renderMedia() {
     elements.mediaVideo.play().catch(() => {});
     elements.mediaImage.removeAttribute("src");
   }
+}
+
+function isMediaActive(appMode) {
+  return Boolean(
+    state.config?.media?.enabled &&
+    state.config.media.showDuringCameraMode &&
+    state.mediaFiles.length > 0 &&
+    appMode.mode === "normal" &&
+    !state.ambient?.visible
+  );
 }
 
 function renderAmbient() {
@@ -442,6 +481,12 @@ function bindEvents() {
   elements.refreshSchedule.addEventListener("click", () => window.closetCast.refreshSchedule());
   elements.openConfig.addEventListener("click", () => window.closetCast.openConfigFolder());
   elements.openLogs.addEventListener("click", () => window.closetCast.openLogsFolder());
+  elements.dashboard.addEventListener("click", (event) => {
+    const externalButton = event.target.closest("[data-external-url]");
+    if (externalButton) {
+      window.closetCast.openExternalUrl(externalButton.dataset.externalUrl).catch(() => {});
+    }
+  });
 
   document.querySelectorAll("[data-layout]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -486,6 +531,7 @@ function bindEvents() {
   window.closetCast.onMediaUpdated((files) => {
     state.mediaFiles = files;
     state.mediaIndex = 0;
+    renderAll(true);
     renderMedia();
   });
 }
@@ -535,8 +581,42 @@ function formatEventTime(event) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(event.startTime));
 }
 
-function formatMaybe(value) {
-  return value === null || value === undefined ? "--" : `${value}F`;
+function renderTraffic(traffic) {
+  if (!traffic || !traffic.enabled) return "";
+  const items = traffic.items || [];
+  const itemMarkup = items.length
+    ? items.map((item) => `<li>${escapeHtml(item.text)}</li>`).join("")
+    : `<li>${escapeHtml(traffic.detail || "No matching incidents found")}</li>`;
+  const updated = traffic.updatedAt ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(traffic.updatedAt)) : "live view";
+  const quickMap = traffic.quickMapUrl
+    ? `<button class="traffic-link" data-external-url="${escapeHtml(traffic.quickMapUrl)}">${escapeHtml(traffic.label || "QuickMap")}</button>`
+    : `<span>${escapeHtml(traffic.label || "Traffic")}</span>`;
+
+  return `
+    <section class="traffic-card ${traffic.error ? "traffic-unavailable" : ""}">
+      <div class="traffic-route">
+        <span>${escapeHtml(traffic.routeLabel || "Traffic")}</span>
+        <strong>${escapeHtml(traffic.headline || "Traffic")}</strong>
+      </div>
+      <ul>${itemMarkup}</ul>
+      <div class="traffic-source">
+        ${quickMap}
+        <span>${escapeHtml(updated)}</span>
+      </div>
+    </section>
+  `;
+}
+
+function formatDegrees(value) {
+  return value === null || value === undefined ? "--" : `${value}°`;
+}
+
+function formatPercent(value) {
+  return value === null || value === undefined ? "--" : `${value}%`;
+}
+
+function formatSpeed(value) {
+  return value === null || value === undefined ? "--" : `${value} mph`;
 }
 
 function tickClock() {

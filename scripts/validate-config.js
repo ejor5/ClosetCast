@@ -59,6 +59,15 @@ if (config.morningBriefing) {
   if (!Array.isArray(config.morningBriefing.weekdayLocationOverrides)) errors.push("morningBriefing.weekdayLocationOverrides must be an array");
 }
 
+if (config.traffic) {
+  requireType("traffic.enabled", config.traffic.enabled, "boolean");
+  requireType("traffic.label", config.traffic.label, "string");
+  requireType("traffic.routeLabel", config.traffic.routeLabel, "string");
+  requireType("traffic.incidentUrl", config.traffic.incidentUrl, "string");
+  requireType("traffic.quickMapUrl", config.traffic.quickMapUrl, "string");
+  if (!Array.isArray(config.traffic.keywords)) errors.push("traffic.keywords must be an array");
+}
+
 if (config.calendar) {
   requireType("calendar.enabled", config.calendar.enabled, "boolean");
   if (!Array.isArray(config.calendar.icsUrls)) errors.push("calendar.icsUrls must be an array");

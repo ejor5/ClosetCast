@@ -12,6 +12,7 @@ The Yankees stream site URL is private/local config. Put your preferred site URL
 - Treats Ring like any other RTSP camera.
 - Rotates local images/videos from `media/`.
 - Shows weather for Almaden/Cambrian Park by default, and Los Altos on Monday/Wednesday school days.
+- Shows a compact San Jose / Highway 85 traffic summary in the weather card, with a configurable live map link.
 - Reads up to three Apple Calendar public `.ics` feed URLs.
 - Caches calendar data so temporary network failures do not blank the dashboard.
 - Rotates YouTube ambiance after noon using direct videos and first-result topic searches.
@@ -136,7 +137,7 @@ Use the settings button, `F1`, or number keys:
 
 Click any camera tile to focus it.
 
-The default normal layout is not a plain grid. It uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Yankees mode keeps the stream dominant in the bottom-right while preserving the five cameras and dashboard cards around it. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
+The default normal layout is not a plain grid. With local media available, ClosetCast gives media the large center stage and compresses cameras into a left-side monitor strip. Without media, it uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Yankees mode keeps the stream dominant in the bottom-right while preserving the five cameras and dashboard cards around it. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
 
 ## Local Media
 
@@ -148,14 +149,35 @@ Place images or videos in `media/`. Supported defaults are:
 
 The folder is rescanned every five minutes while the app runs.
 
+When local media is available in normal dashboard mode, ClosetCast prioritizes it visually over the cameras. Ambient YouTube and Yankees mode still take over when those modes are active.
+
 ## Weather
 
 `morningBriefing` controls the weather card. By default `showAllDay` is enabled, so the weather card stays available all day.
 
 - Normal days use `Almaden / Cambrian Park`.
 - Monday and Wednesday use `Los Altos` and show the `School day` label.
+- The weather card prioritizes high/low temperature, rain percentage, and wind speed.
 
 Weather is fetched from Open-Meteo with latitude/longitude from `config.json`. If the weather request fails, ClosetCast logs it and shows a clear unavailable state while the rest of the dashboard keeps running.
+
+## Traffic
+
+The `traffic` section adds a lightweight San Jose route check to the weather card. By default it watches Highway 85 / West Valley Fwy keywords and links to a Caltrans QuickMap view centered around the West Valley/San Jose area.
+
+Relevant config:
+
+```json
+"traffic": {
+  "enabled": true,
+  "routeLabel": "Hwy 85 / West Valley Fwy",
+  "incidentUrl": "https://cad.chp.ca.gov/Traffic.aspx",
+  "quickMapUrl": "https://quickmap.dot.ca.gov/?ll=37.25,-121.95&z=11",
+  "keywords": ["SR-85", "CA-85", "Highway 85", "West Valley", "West Valley Fwy"]
+}
+```
+
+If the incident page is unreachable or changes shape, ClosetCast keeps the dashboard alive and shows the QuickMap fallback link.
 
 ## Apple Calendar
 

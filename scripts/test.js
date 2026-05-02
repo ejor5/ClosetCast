@@ -3,7 +3,7 @@ const path = require("path");
 const vm = require("vm");
 const { CalendarService, eventsForWindow, normalizeCalendarUrl, parseIcs } = require("../src/calendarService");
 const { DayCycleService } = require("../src/dayCycleService");
-const { selectLocation } = require("../src/weatherService");
+const { findTrafficMentions, selectLocation } = require("../src/weatherService");
 const { findYankeesStreamLink } = require("../src/yankeesScheduler");
 const { chooseAmbientItem, findFirstYouTubeVideoId, isWithinAmbientWindow, toYouTubeEmbedUrl, youtubeSearchUrl } = require("../src/ambientYouTubeService");
 
@@ -50,6 +50,8 @@ function testWeatherLocation() {
   const config = require("../config.example.json").morningBriefing;
   assert(selectLocation(config, new Date(2026, 3, 27, 8)).id === "los-altos", "Monday should use Los Altos");
   assert(selectLocation(config, new Date(2026, 3, 28, 8)).id === "almaden-cambrian", "Tuesday should use Almaden/Cambrian");
+  const traffic = findTrafficMentions("<table><tr><td>SR-85 northbound near Saratoga has a disabled vehicle</td></tr></table>", ["SR-85", "Saratoga"], 2);
+  assert(traffic.length === 1 && traffic[0].text.includes("SR-85"), "traffic parser should find route snippets");
 }
 
 function testLayoutEngine() {
@@ -60,8 +62,10 @@ function testLayoutEngine() {
   const cameras = [1, 2, 3, 4, 5].map((number) => ({ id: `cam-${number}`, priority: number }));
   const yankees = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "yankees" }, cameras });
   const winddown = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "winddown" }, cameras });
+  const media = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "normal" }, cameras, mediaActive: true });
   assert(yankees.showStream && yankees.cameraClass.includes("camera-stack"), "Yankees layout should show stream and stack cameras");
   assert(winddown.showWinddown && !winddown.showStream, "Wind-down layout should show wind-down panel");
+  assert(media.stageClass.includes("has-media"), "Normal layout should emphasize media when active");
 }
 
 function testYankeesStreamResolver() {

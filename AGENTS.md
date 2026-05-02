@@ -12,6 +12,7 @@ ClosetCast is a lightweight Windows kiosk app for an old laptop. Keep the stack 
 - Support layouts: focus, split, grid4, and five-camera primary-plus-secondary mode.
 - Rotate local files from `media/` when configured.
 - Show a morning briefing with local weather and optional Apple Calendar events.
+- Weather should prioritize high/low temperature, rain percentage, wind speed, and the configured San Jose/Highway 85 traffic summary.
 - Run as an all-day dashboard with normal, Yankees, and wind-down modes.
 - Rotate after-noon YouTube ambiance from direct links and configured search topics.
 - Use Windows Task Scheduler for 9 AM wake and optional backup sleep behavior.
@@ -34,7 +35,7 @@ ClosetCast is a lightweight Windows kiosk app for an old laptop. Keep the stack 
 - Setup must write JSON without a UTF-8 BOM and must tolerate Apple `webcal://` calendar URLs.
 - Keep `scripts/run-ui-test.ps1` safe: no fullscreen, no autostart, no wake task installation, and no sleep command.
 - `Test-ClosetCast.cmd` should remain the friendly local test entry point for pasting temporary RTSP/calendar links into `.closetcast-test/config.test.json`.
-- Layout code should stay in `src/layoutEngine.js` and mode/power decisions should stay in main-process services.
+- Layout code should stay in `src/layoutEngine.js` and mode/power decisions should stay in main-process services. Normal mode should give local media larger visual priority than cameras when media is available.
 - Ambient YouTube should stream in a webview only. Do not download video content. Prefer YouTube embed/player URLs so Mattercam-style live streams do not show chat or page chrome.
 
 ## Validation

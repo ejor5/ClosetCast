@@ -283,3 +283,12 @@ ipcMain.handle("closetcast:open-logs-folder", async () => {
   await shell.openPath(path.dirname(logger.file));
   return true;
 });
+
+ipcMain.handle("closetcast:open-external-url", async (_event, url) => {
+  const parsed = new URL(String(url || ""));
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Only http and https URLs can be opened");
+  }
+  await shell.openExternal(parsed.toString());
+  return true;
+});

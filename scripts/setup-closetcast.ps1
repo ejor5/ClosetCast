@@ -216,6 +216,12 @@ if ((Test-Path -LiteralPath $configPath) -and !(Read-YesNo "config.json already 
   $config.fullscreenOnLaunch = Read-YesNo "Start fullscreen/kiosk on launch?" $true
   $config.media.enabled = Read-YesNo "Enable local media rotation from the media folder?" $true
   $config.yankees.enabled = Read-YesNo "Enable Yankees auto mode?" $true
+  if ($null -eq $config.yankees.PSObject.Properties["streamSiteUrl"]) {
+    $config.yankees | Add-Member -NotePropertyName "streamSiteUrl" -NotePropertyValue ""
+  }
+  if ($config.yankees.enabled) {
+    $config.yankees.streamSiteUrl = Read-Default "Paste Yankees stream site base URL"
+  }
   $config.ambientYouTube.enabled = Read-YesNo "Enable rotating YouTube ambiance after noon?" $true
   $config.dayCycle.enabled = Read-YesNo "Enable 10 PM wind-down and 10:30 PM sleep?" $true
   $config.dayCycle.installWakeTask = Read-YesNo "Install 9 AM Windows wake task?" $true

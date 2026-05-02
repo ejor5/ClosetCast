@@ -249,7 +249,7 @@ function renderYankees() {
   }
 
   const shouldPrepare = yankees.mode === "preparing" || yankees.mode === "yankees" || getEffectiveAppMode().mode === "yankees";
-  const targetStreamUrl = yankees.streamUrl || state.config.debug.yankeesUrl || state.config.yankees.streameastUrl;
+  const targetStreamUrl = yankees.streamUrl || state.config.debug.yankeesUrl || state.config.yankees.streamSiteUrl;
   if (shouldPrepare && targetStreamUrl && state.loadedStreamUrl !== targetStreamUrl) {
     elements.streamView.src = targetStreamUrl;
     state.streamLoaded = true;
@@ -393,7 +393,7 @@ function setDebugMode(mode) {
 }
 
 function forceResolveYankeesStream() {
-  const baseUrl = state.config.yankees.streameastUrl || state.config.debug.yankeesUrl;
+  const baseUrl = state.config.yankees.streamSiteUrl || state.config.debug.yankeesUrl;
   state.yankees = {
     ...(state.yankees || {}),
     enabled: true,

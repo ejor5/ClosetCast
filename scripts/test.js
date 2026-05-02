@@ -71,8 +71,8 @@ function testYankeesStreamResolver() {
     "<a href=\"/mlb/new-york-yankees-vs-texas-rangers-1/\"><span>New York Yankees vs Texas Rangers</span></a>",
     "</body></html>"
   ].join("");
-  const match = findYankeesStreamLink(html, "https://v2.streameast.ga/", "Yankees", ["new-york-yankees"]);
-  assert(match.href === "https://v2.streameast.ga/mlb/new-york-yankees-vs-texas-rangers-1/", "Yankees resolver should return current game link");
+  const match = findYankeesStreamLink(html, "https://stream-site.example/", "Yankees", ["new-york-yankees"]);
+  assert(match.href === "https://stream-site.example/mlb/new-york-yankees-vs-texas-rangers-1/", "Yankees resolver should return current game link");
 }
 
 function testAmbientYouTube() {

@@ -2,11 +2,7 @@
 
 ClosetCast is a lightweight Windows kiosk app for an old laptop in a closet: five RTSP cameras, weather, Apple Calendar, Yankees mode, wind-down mode, and Windows wake/sleep automation.
 
-The Yankees stream URL is configurable and defaults to:
-
-```text
-https://v2.streameast.ga/
-```
+The Yankees stream site URL is private/local config. Put your preferred site URL in `config.json`; the public repo keeps that value blank.
 
 ## What It Does
 
@@ -100,7 +96,7 @@ That generates `.closetcast-test\config.test.json` from the example config and l
 
 - normal dashboard
 - Mattercam YouTube ambiance
-- Yankees mode with an immediate Streameast Yankees-link resolver test
+- Yankees mode with an immediate configured-site Yankees-link resolver test
 - wind-down mode
 
 To start directly in one mode:
@@ -219,11 +215,7 @@ The app fetches the configured schedule source for today's Yankees game. If a ga
 - live window start: `gameStartBufferMinutes` before game time
 - live window end: `assumedGameDurationMinutes + gameEndBufferMinutes` after game time
 
-Before and during the live window, ClosetCast fetches the configured Streameast base page and looks for a Yankees link, such as:
-
-```text
-https://v2.streameast.ga/mlb/new-york-yankees-vs-texas-rangers-1/
-```
+Before and during the live window, ClosetCast fetches the configured stream site base page and looks for a Yankees link. The per-game link can change each day, so ClosetCast resolves it at runtime from your configured site.
 
 It matches anchor text and URLs using `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL as the dominant bottom-right view. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
 
@@ -231,7 +223,7 @@ Relevant config:
 
 ```json
 "yankees": {
-  "streameastUrl": "https://v2.streameast.ga/",
+  "streamSiteUrl": "https://your-stream-site.example/",
   "streamSearchText": "Yankees",
   "resolveStreamLink": true,
   "streamLinkRefreshMinutes": 20,

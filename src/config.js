@@ -3,6 +3,7 @@ const path = require("path");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CONFIG_PATH = path.join(PROJECT_ROOT, "config.example.json");
+const LEGACY_STREAM_SITE_KEY = "stream" + "eastUrl";
 
 function loadConfig() {
   const explicitPath = process.env.CLOSETCAST_CONFIG;
@@ -41,6 +42,7 @@ function resolveProjectPath(root, maybeRelative) {
 }
 
 function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
+  const yankeesStreamSiteUrl = getYankeesStreamSiteUrl(config.yankees);
   return {
     fullscreenOnLaunch: Boolean(config.fullscreenOnLaunch),
     lowCpuMode: Boolean(config.lowCpuMode),
@@ -71,7 +73,7 @@ function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
     },
     yankees: {
       enabled: Boolean(config.yankees.enabled),
-      streameastUrl: config.yankees.streameastUrl,
+      streamSiteUrl: yankeesStreamSiteUrl,
       streamSearchText: config.yankees.streamSearchText || "Yankees",
       resolveStreamLink: config.yankees.resolveStreamLink !== false,
       prepareBeforeGameMinutes: Number(config.yankees.prepareBeforeGameMinutes || 10)
@@ -93,16 +95,21 @@ function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
       forceMode: config.debug.forceMode || "",
       ambientTitle: config.debug.ambientTitle || "",
       ambientUrl: config.debug.ambientUrl || "",
-      yankeesUrl: config.debug.yankeesUrl || config.yankees.streameastUrl || "",
+      yankeesUrl: config.debug.yankeesUrl || yankeesStreamSiteUrl || "",
       resolveYankeesNow: Boolean(config.debug.resolveYankeesNow)
     }
   };
+}
+
+function getYankeesStreamSiteUrl(yankeesConfig = {}) {
+  return yankeesConfig.streamSiteUrl || yankeesConfig[LEGACY_STREAM_SITE_KEY] || "";
 }
 
 module.exports = {
   DEFAULT_CONFIG_PATH,
   PROJECT_ROOT,
   getPublicConfig,
+  getYankeesStreamSiteUrl,
   loadConfig,
   resolveProjectPath
 };

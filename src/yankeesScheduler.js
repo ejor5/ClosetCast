@@ -1,6 +1,9 @@
+const { getYankeesStreamSiteUrl } = require("./config");
+
 class YankeesScheduler {
   constructor(config, logger, onUpdate) {
     this.config = config.yankees || {};
+    this.streamSiteUrl = getYankeesStreamSiteUrl(this.config);
     this.logger = logger;
     this.onUpdate = onUpdate;
     this.timer = null;
@@ -11,7 +14,7 @@ class YankeesScheduler {
       message: "Yankees mode idle",
       game: null,
       scheduleError: null,
-      streamUrl: this.config.streameastUrl || "",
+      streamUrl: this.streamSiteUrl,
       streamResolvedAt: null,
       streamError: null
     };
@@ -134,7 +137,7 @@ class YankeesScheduler {
     const refreshMs = Number(this.config.streamLinkRefreshMinutes || 20) * 60_000;
     const resolvedAt = this.state.streamResolvedAt ? new Date(this.state.streamResolvedAt).getTime() : 0;
     const currentUrl = this.state.streamUrl || "";
-    const baseUrl = this.config.streameastUrl || "";
+    const baseUrl = this.streamSiteUrl;
 
     if (currentUrl && currentUrl !== baseUrl && Date.now() - resolvedAt < refreshMs) {
       return;
@@ -172,7 +175,7 @@ class YankeesScheduler {
 }
 
 async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
-  if (!baseUrl) throw new Error("No Streameast URL configured");
+  if (!baseUrl) throw new Error("No Yankees stream site URL configured");
   const urls = uniqueUrls([
     baseUrl,
     safeUrl("/mlb/", baseUrl)

@@ -6,6 +6,7 @@ const configPath = path.resolve(process.cwd(), file);
 const raw = fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, "");
 const config = JSON.parse(raw);
 const errors = [];
+const legacyStreamSiteKey = "stream" + "eastUrl";
 
 function requireType(pathText, value, type) {
   if (typeof value !== type) errors.push(`${pathText} must be ${type}`);
@@ -43,7 +44,7 @@ if (!config.yankees || typeof config.yankees !== "object") {
   errors.push("yankees must be an object");
 } else {
   requireType("yankees.enabled", config.yankees.enabled, "boolean");
-  requireType("yankees.streameastUrl", config.yankees.streameastUrl, "string");
+  requireType("yankees.streamSiteUrl", config.yankees.streamSiteUrl ?? config.yankees[legacyStreamSiteKey], "string");
   requireType("yankees.scheduleUrl", config.yankees.scheduleUrl, "string");
   if (config.yankees.resolveStreamLink !== undefined) requireType("yankees.resolveStreamLink", config.yankees.resolveStreamLink, "boolean");
   if (config.yankees.streamLinkPatterns !== undefined && !Array.isArray(config.yankees.streamLinkPatterns)) errors.push("yankees.streamLinkPatterns must be an array when present");

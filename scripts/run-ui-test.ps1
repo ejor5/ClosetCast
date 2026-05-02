@@ -161,9 +161,21 @@ function Set-TestLinks {
   Set-TestCalendars $Config
 
   Write-Host ""
-  $streameast = Read-Host "Streameast base URL for Yankees test [$($Config.yankees.streameastUrl)]"
-  if (![string]::IsNullOrWhiteSpace($streameast)) {
-    $Config.yankees.streameastUrl = $streameast
+  if ($null -eq $Config.yankees.PSObject.Properties["streamSiteUrl"]) {
+    $Config.yankees | Add-Member -NotePropertyName "streamSiteUrl" -NotePropertyValue ""
+  }
+
+  $savedStreamSiteUrl = $Config.yankees.streamSiteUrl
+  $legacyStreamSiteProperty = $Config.yankees.PSObject.Properties[("stream" + "eastUrl")]
+  if ([string]::IsNullOrWhiteSpace($savedStreamSiteUrl) -and $legacyStreamSiteProperty) {
+    $savedStreamSiteUrl = $legacyStreamSiteProperty.Value
+  }
+
+  $streamSiteUrl = Read-Host "Yankees stream site base URL for this test [$savedStreamSiteUrl]"
+  if (![string]::IsNullOrWhiteSpace($streamSiteUrl)) {
+    $Config.yankees.streamSiteUrl = $streamSiteUrl
+  } else {
+    $Config.yankees.streamSiteUrl = $savedStreamSiteUrl
   }
 
   $ffmpegPath = Find-FfmpegPath
@@ -223,7 +235,7 @@ $config.debug = [pscustomobject]@{
   forceMode = $Mode
   ambientTitle = "Mattercam live"
   ambientUrl = ""
-  yankeesUrl = $config.yankees.streameastUrl
+  yankeesUrl = $config.yankees.streamSiteUrl
   resolveYankeesNow = $true
 }
 

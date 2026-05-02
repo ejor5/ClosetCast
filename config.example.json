@@ -206,7 +206,7 @@
     "enabled": true,
     "teamId": 147,
     "scheduleUrl": "https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=147&hydrate=team,linescore&date={date}",
-    "streameastUrl": "https://v2.streameast.ga/",
+    "streamSiteUrl": "",
     "streamSearchText": "Yankees",
     "resolveStreamLink": true,
     "streamLinkRefreshMinutes": 20,

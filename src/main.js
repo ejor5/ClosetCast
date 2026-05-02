@@ -1,6 +1,6 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, powerMonitor, shell } = require("electron");
-const { loadConfig, getPublicConfig } = require("./config");
+const { getYankeesStreamSiteUrl, loadConfig, getPublicConfig } = require("./config");
 const { createLogger } = require("./logger");
 const { listMediaFiles } = require("./mediaLibrary");
 const { createStreamServer } = require("./streamServer");
@@ -214,7 +214,7 @@ ipcMain.handle("closetcast:resolve-yankees-stream", async () => {
     throw new Error("Yankees stream test resolver is only available in UI test mode");
   }
 
-  const baseUrl = config.yankees.streameastUrl || "";
+  const baseUrl = getYankeesStreamSiteUrl(config.yankees);
   try {
     logger.info("Resolving Yankees stream link for UI test", { source: baseUrl });
     const streamUrl = await resolveYankeesStreamLink({

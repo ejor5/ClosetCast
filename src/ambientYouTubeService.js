@@ -206,14 +206,49 @@ function youtubeSearchUrl(query) {
 
 function withAutoplay(rawUrl, config) {
   try {
-    const url = new URL(rawUrl);
+    const url = new URL(toYouTubeEmbedUrl(rawUrl));
     if (config.autoplay !== false) url.searchParams.set("autoplay", "1");
     if (config.mute !== false) url.searchParams.set("mute", "1");
     if (!url.searchParams.has("rel")) url.searchParams.set("rel", "0");
+    if (!url.searchParams.has("playsinline")) url.searchParams.set("playsinline", "1");
+    if (!url.searchParams.has("modestbranding")) url.searchParams.set("modestbranding", "1");
     return url.toString();
   } catch (_) {
     return rawUrl;
   }
+}
+
+function toYouTubeEmbedUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  const hostname = url.hostname.replace(/^www\./, "");
+  let videoId = "";
+
+  if (hostname === "youtu.be") {
+    videoId = url.pathname.split("/").filter(Boolean)[0] || "";
+  } else if (hostname.endsWith("youtube.com")) {
+    if (url.pathname === "/watch") {
+      videoId = url.searchParams.get("v") || "";
+    } else if (url.pathname.startsWith("/shorts/") || url.pathname.startsWith("/live/")) {
+      videoId = url.pathname.split("/").filter(Boolean)[1] || "";
+    } else if (url.pathname.startsWith("/embed/")) {
+      return url.toString();
+    }
+  }
+
+  if (!videoId) return url.toString();
+
+  const embed = new URL(`https://www.youtube.com/embed/${videoId}`);
+  const startSeconds = parseYouTubeStart(url.searchParams.get("t") || url.searchParams.get("start"));
+  if (startSeconds) embed.searchParams.set("start", String(startSeconds));
+  return embed.toString();
+}
+
+function parseYouTubeStart(value) {
+  if (!value) return 0;
+  if (/^\d+$/.test(value)) return Number(value);
+  const match = String(value).match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/i);
+  if (!match) return 0;
+  return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
 }
 
 function isWithinAmbientWindow(date, config) {
@@ -229,5 +264,6 @@ module.exports = {
   findFirstYouTubeVideoId,
   isWithinAmbientWindow,
   resolveFirstYouTubeResult,
+  toYouTubeEmbedUrl,
   youtubeSearchUrl
 };

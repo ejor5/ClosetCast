@@ -4,7 +4,7 @@ const { loadConfig, getPublicConfig } = require("./config");
 const { createLogger } = require("./logger");
 const { listMediaFiles } = require("./mediaLibrary");
 const { createStreamServer } = require("./streamServer");
-const { YankeesScheduler } = require("./yankeesScheduler");
+const { YankeesScheduler, resolveYankeesStreamLink } = require("./yankeesScheduler");
 const { WeatherService } = require("./weatherService");
 const { CalendarService } = require("./calendarService");
 const { DayCycleService } = require("./dayCycleService");
@@ -27,6 +27,10 @@ let latestDayCycleState = null;
 let latestAmbientState = null;
 let latestAppModeState = null;
 let lastLoggedAppMode = null;
+
+if (process.env.CLOSETCAST_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.CLOSETCAST_USER_DATA_DIR));
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -203,6 +207,64 @@ ipcMain.handle("closetcast:get-bootstrap", () => {
 ipcMain.handle("closetcast:refresh-schedule", async () => {
   if (scheduler) await scheduler.refreshNow();
   return latestYankeesState;
+});
+
+ipcMain.handle("closetcast:resolve-yankees-stream", async () => {
+  if (!config.debug?.enabled) {
+    throw new Error("Yankees stream test resolver is only available in UI test mode");
+  }
+
+  const baseUrl = config.yankees.streameastUrl || "";
+  try {
+    logger.info("Resolving Yankees stream link for UI test", { source: baseUrl });
+    const streamUrl = await resolveYankeesStreamLink({
+      baseUrl,
+      searchText: config.yankees.streamSearchText || "Yankees",
+      patterns: config.yankees.streamLinkPatterns || ["yankees", "new-york-yankees"]
+    });
+    latestYankeesState = {
+      ...(latestYankeesState || {}),
+      enabled: true,
+      mode: "yankees",
+      message: "UI test: Yankees stream resolved",
+      streamUrl,
+      streamResolvedAt: new Date().toISOString(),
+      streamError: null,
+      game: latestYankeesState?.game || {
+        awayTeam: "New York Yankees",
+        homeTeam: "Stream test",
+        status: "UI test",
+        localStartTimeLabel: "Now"
+      }
+    };
+    mainWindow.webContents.send("closetcast:yankees-state", latestYankeesState);
+    return latestYankeesState;
+  } catch (error) {
+    logger.warn("Yankees stream link UI test resolution failed", { error: error.message });
+    latestYankeesState = {
+      ...(latestYankeesState || {}),
+      enabled: true,
+      mode: "yankees",
+      message: "UI test: Yankees link unavailable; showing base page",
+      streamUrl: baseUrl,
+      streamResolvedAt: null,
+      streamError: error.message,
+      game: latestYankeesState?.game || {
+        awayTeam: "New York Yankees",
+        homeTeam: "Stream test",
+        status: "UI test fallback",
+        localStartTimeLabel: "Now"
+      }
+    };
+    mainWindow.webContents.send("closetcast:yankees-state", latestYankeesState);
+    return latestYankeesState;
+  }
+});
+
+ipcMain.handle("closetcast:refresh-ambient", async () => {
+  if (!ambientYouTubeService) return latestAmbientState;
+  await ambientYouTubeService.refresh();
+  return latestAmbientState;
 });
 
 ipcMain.handle("closetcast:set-fullscreen", (_event, enabled) => {

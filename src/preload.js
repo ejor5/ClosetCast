@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("closetCast", {
   getBootstrap: () => ipcRenderer.invoke("closetcast:get-bootstrap"),
   refreshSchedule: () => ipcRenderer.invoke("closetcast:refresh-schedule"),
+  resolveYankeesStream: () => ipcRenderer.invoke("closetcast:resolve-yankees-stream"),
+  refreshAmbient: () => ipcRenderer.invoke("closetcast:refresh-ambient"),
   setFullscreen: (enabled) => ipcRenderer.invoke("closetcast:set-fullscreen", enabled),
   openConfigFolder: () => ipcRenderer.invoke("closetcast:open-config-folder"),
   openLogsFolder: () => ipcRenderer.invoke("closetcast:open-logs-folder"),

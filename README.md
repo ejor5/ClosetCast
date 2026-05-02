@@ -85,14 +85,22 @@ Manual path:
 To test the dashboard without fullscreen, autostart, wake tasks, or sleep commands:
 
 ```powershell
+.\Test-ClosetCast.cmd
+```
+
+That is the easiest local test path. It asks for five RTSP links, up to three Apple Calendar links, and then writes them only to `.closetcast-test\config.test.json`. It does not edit your real `config.json`, does not reuse the production Electron profile, and `.closetcast-test\` is ignored by git.
+
+You can also launch the test script directly:
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps1
 ```
 
-That generates `.closetcast-test\config.test.json` and launches ClosetCast in a normal window. Press `F6` inside the app to cycle through:
+That generates `.closetcast-test\config.test.json` from the example config and launches ClosetCast in a normal window. Press `F6` inside the app to cycle through:
 
 - normal dashboard
-- afternoon YouTube ambiance
-- Yankees mode
+- Mattercam YouTube ambiance
+- Yankees mode with an immediate Streameast Yankees-link resolver test
 - wind-down mode
 
 To start directly in one mode:
@@ -102,6 +110,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps
 ```
 
 Add `-UseExistingConfig` if you want the test run to use your real camera/calendar URLs while still disabling sleep/autostart behavior.
+
+Add `-PromptForLinks` if you want the PowerShell test script to ask for RTSP and calendar links:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps1 -PromptForLinks -Mode yankees
+```
 
 ## Camera Config
 
@@ -164,6 +178,8 @@ From 10:00 PM to 10:30 PM, ClosetCast switches to wind-down mode and shows tomor
 ## Afternoon YouTube Ambiance
 
 After noon, while the app is in normal dashboard mode, ClosetCast can show a rotating YouTube ambiance panel. It does not download videos. It either loads a direct YouTube link or searches YouTube for a configured topic and uses the first video result it can parse.
+
+YouTube watch links are converted to clean embedded player links before loading in the app. That keeps Mattercam and the other ambiance picks filling the video area without the normal YouTube page, comments, or live chat taking over the panel.
 
 Default topics include:
 
@@ -354,6 +370,7 @@ Keep `lowCpuMode` enabled. It lowers camera bridge frame rate and resolution. Yo
 - `src/layoutEngine.js`: responsive normal, Yankees, and wind-down layout decisions.
 - `src/renderer.js`: camera wall, media rotation, Yankees view.
 - `config.example.json`: safe example config.
+- `Test-ClosetCast.cmd`: safe local UI test wizard for temporary RTSP/calendar links.
 - `media/`: local image/video rotation folder.
 - `logs/`: runtime logs.
 - `scripts/install-autostart.ps1`: Task Scheduler setup.

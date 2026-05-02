@@ -173,17 +173,31 @@ class YankeesScheduler {
 
 async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
   if (!baseUrl) throw new Error("No Streameast URL configured");
-  const response = await fetch(baseUrl, {
-    headers: {
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "ClosetCast/0.1"
+  const urls = uniqueUrls([
+    baseUrl,
+    safeUrl("/mlb/", baseUrl)
+  ]);
+  let lastError = "";
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent": "ClosetCast/0.1"
+        }
+      });
+      if (!response.ok) throw new Error(`Stream page returned ${response.status}`);
+      const html = await response.text();
+      const match = findYankeesStreamLink(html, url, searchText, patterns);
+      if (match) return match.href;
+      lastError = `No Yankees link found on ${url}`;
+    } catch (error) {
+      lastError = error.message;
     }
-  });
-  if (!response.ok) throw new Error(`Stream page returned ${response.status}`);
-  const html = await response.text();
-  const match = findYankeesStreamLink(html, baseUrl, searchText, patterns);
-  if (!match) throw new Error("No Yankees link found on stream page");
-  return match.href;
+  }
+
+  throw new Error(lastError || "No Yankees link found on stream page");
 }
 
 function findYankeesStreamLink(html, baseUrl, searchText = "Yankees", patterns = []) {
@@ -247,6 +261,18 @@ function decodeHtml(value) {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
+}
+
+function safeUrl(pathname, baseUrl) {
+  try {
+    return new URL(pathname, baseUrl).toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function uniqueUrls(urls) {
+  return [...new Set(urls.filter(Boolean))];
 }
 
 function parseSchedule(body, dateText) {

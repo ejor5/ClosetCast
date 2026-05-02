@@ -348,20 +348,81 @@ function setDebugMode(mode) {
   };
 
   if (normalized === "ambient") {
-    state.ambient = {
-      enabled: true,
-      visible: true,
-      title: "UI test ambiance",
-      url: state.config.debug.ambientUrl || "https://www.youtube.com/watch?v=9E-l9qYiqxQ&t=2725s&autoplay=1&mute=1",
-      source: "debug",
-      message: "UI test ambiance"
-    };
+    if (state.config.debug.ambientUrl) {
+      state.ambient = {
+        enabled: true,
+        visible: true,
+        title: state.config.debug.ambientTitle || "UI test ambiance",
+        url: state.config.debug.ambientUrl,
+        source: "debug",
+        message: "UI test ambiance"
+      };
+    } else {
+      state.ambient = {
+        ...(state.ambient || {}),
+        enabled: true,
+        visible: true,
+        title: state.ambient?.title || state.config.debug.ambientTitle || "Resolving Mattercam",
+        source: state.ambient?.source || "debug",
+        message: state.ambient?.message || "Resolving first YouTube result"
+      };
+      window.closetCast.refreshAmbient().then((nextState) => {
+        if (state.localModeOverride?.debugName === "ambient" && nextState) {
+          applyAmbientState({ ...nextState, visible: true });
+        }
+      }).catch((error) => {
+        state.ambient = {
+          ...state.ambient,
+          visible: true,
+          error: error.message,
+          message: "Ambient refresh failed"
+        };
+        renderAmbient();
+      });
+    }
   } else if (state.ambient?.source === "debug") {
     state.ambient = { ...state.ambient, visible: false };
   }
 
+  if (normalized === "yankees") {
+    forceResolveYankeesStream();
+  }
+
   renderAll();
   renderMedia();
+}
+
+function forceResolveYankeesStream() {
+  const baseUrl = state.config.yankees.streameastUrl || state.config.debug.yankeesUrl;
+  state.yankees = {
+    ...(state.yankees || {}),
+    enabled: true,
+    mode: "yankees",
+    message: "UI test: resolving current Yankees page",
+    streamUrl: baseUrl,
+    streamError: null,
+    game: state.yankees?.game || {
+      awayTeam: "New York Yankees",
+      homeTeam: "Stream test",
+      status: "Resolving",
+      localStartTimeLabel: "Now"
+    }
+  };
+  renderYankees();
+
+  window.closetCast.resolveYankeesStream().then((nextState) => {
+    if (state.localModeOverride?.debugName === "yankees" && nextState) {
+      applyYankeesState({ ...nextState, mode: "yankees" });
+      renderAll();
+    }
+  }).catch((error) => {
+    state.yankees = {
+      ...state.yankees,
+      streamError: error.message,
+      message: "UI test: Yankees resolver failed; showing base page"
+    };
+    renderYankees();
+  });
 }
 
 function getEffectiveAppMode() {

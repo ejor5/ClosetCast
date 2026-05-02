@@ -86,8 +86,10 @@
   "debug": {
     "enabled": false,
     "forceMode": "",
+    "ambientTitle": "",
     "ambientUrl": "",
-    "yankeesUrl": ""
+    "yankeesUrl": "",
+    "resolveYankeesNow": false
   },
   "streamServer": {
     "host": "127.0.0.1",

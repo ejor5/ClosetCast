@@ -86,6 +86,11 @@ if (config.ambientYouTube) {
 
 if (config.debug) {
   requireType("debug.enabled", config.debug.enabled, "boolean");
+  if (config.debug.forceMode !== undefined) requireType("debug.forceMode", config.debug.forceMode, "string");
+  if (config.debug.ambientTitle !== undefined) requireType("debug.ambientTitle", config.debug.ambientTitle, "string");
+  if (config.debug.ambientUrl !== undefined) requireType("debug.ambientUrl", config.debug.ambientUrl, "string");
+  if (config.debug.yankeesUrl !== undefined) requireType("debug.yankeesUrl", config.debug.yankeesUrl, "string");
+  if (config.debug.resolveYankeesNow !== undefined) requireType("debug.resolveYankeesNow", config.debug.resolveYankeesNow, "boolean");
 }
 
 if (errors.length) {

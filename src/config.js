@@ -91,8 +91,10 @@ function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
     debug: {
       enabled: Boolean(config.debug.enabled),
       forceMode: config.debug.forceMode || "",
+      ambientTitle: config.debug.ambientTitle || "",
       ambientUrl: config.debug.ambientUrl || "",
-      yankeesUrl: config.debug.yankeesUrl || config.yankees.streameastUrl || ""
+      yankeesUrl: config.debug.yankeesUrl || config.yankees.streameastUrl || "",
+      resolveYankeesNow: Boolean(config.debug.resolveYankeesNow)
     }
   };
 }

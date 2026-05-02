@@ -5,7 +5,7 @@ const { CalendarService, eventsForWindow, normalizeCalendarUrl, parseIcs } = req
 const { DayCycleService } = require("../src/dayCycleService");
 const { selectLocation } = require("../src/weatherService");
 const { findYankeesStreamLink } = require("../src/yankeesScheduler");
-const { chooseAmbientItem, findFirstYouTubeVideoId, isWithinAmbientWindow, youtubeSearchUrl } = require("../src/ambientYouTubeService");
+const { chooseAmbientItem, findFirstYouTubeVideoId, isWithinAmbientWindow, toYouTubeEmbedUrl, youtubeSearchUrl } = require("../src/ambientYouTubeService");
 
 function assert(condition, message) {
   if (!condition) {
@@ -79,6 +79,7 @@ function testAmbientYouTube() {
   const html = "{\"videoId\":\"abcdefghijk\"}<a href=\"/watch?v=zzzzzzzzzzz\">Later</a>";
   assert(findFirstYouTubeVideoId(html) === "abcdefghijk", "ambient YouTube should parse first video id");
   assert(youtubeSearchUrl("Mattercam live").includes("Mattercam%20live"), "ambient YouTube should build search URL");
+  assert(toYouTubeEmbedUrl("https://www.youtube.com/watch?v=9E-l9qYiqxQ&t=2725s") === "https://www.youtube.com/embed/9E-l9qYiqxQ?start=2725", "ambient YouTube should use clean embed links");
   assert(isWithinAmbientWindow(new Date(2026, 3, 28, 13, 0), { startTime: "12:00", endTime: "22:00" }), "1 PM should be ambient time");
   assert(!isWithinAmbientWindow(new Date(2026, 3, 28, 10, 0), { startTime: "12:00", endTime: "22:00" }), "10 AM should not be ambient time");
   const item = chooseAmbientItem({

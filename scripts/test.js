@@ -64,9 +64,11 @@ function testLayoutEngine() {
   const yankees = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "yankees" }, cameras });
   const winddown = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "winddown" }, cameras });
   const media = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "normal" }, cameras, mediaActive: true });
+  const focused = sandbox.window.closetCastLayout.buildLayout({ appMode: { mode: "normal" }, cameras, cameraLayout: "focus", primaryCameraId: "cam-1", focusedCameraId: "cam-4" });
   assert(yankees.showStream && yankees.cameraClass.includes("camera-stack"), "Yankees layout should show stream and stack cameras");
   assert(winddown.showWinddown && !winddown.showStream, "Wind-down layout should show wind-down panel");
   assert(media.stageClass.includes("has-media"), "Normal layout should emphasize media when active");
+  assert(focused.cameras[0].id === "cam-4", "Focus layout should prioritize the clicked camera");
 }
 
 function testYankeesStreamResolver() {

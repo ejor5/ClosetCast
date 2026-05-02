@@ -4,7 +4,9 @@
     const ambientActive = Boolean(input.ambient?.visible);
     const mediaActive = Boolean(input.mediaActive);
     const requestedCameraLayout = input.cameraLayout || "five";
-    const primaryCameraId = input.primaryCameraId || input.focusedCameraId;
+    const primaryCameraId = requestedCameraLayout === "focus"
+      ? input.focusedCameraId || input.primaryCameraId
+      : input.primaryCameraId || input.focusedCameraId;
     const cameras = orderCameras(input.cameras || [], primaryCameraId);
 
     if (mode === "winddown") {

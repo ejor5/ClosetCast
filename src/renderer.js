@@ -10,6 +10,7 @@ const state = {
   mediaFiles: [],
   mediaIndex: 0,
   layout: "five",
+  previousLayout: null,
   focusedCameraId: null,
   streamLoaded: false,
   loadedStreamUrl: "",
@@ -148,16 +149,27 @@ function renderCameras(layout) {
     label.innerHTML = `<span>${escapeHtml(camera.name)}</span><small>${escapeHtml(state.cameraHealth[camera.id] || "RTSP")}</small>`;
 
     tile.append(image, label);
-    tile.addEventListener("click", () => {
-      state.focusedCameraId = camera.id;
-      state.layout = "focus";
-      renderAll(true);
-      syncLayoutButtons();
-    });
+    tile.addEventListener("click", () => toggleCameraFocus(camera.id));
     elements.cameraWall.append(tile);
   });
 
   updateCameraHealth();
+  syncLayoutButtons();
+}
+
+function toggleCameraFocus(cameraId) {
+  if (state.layout === "focus" && state.focusedCameraId === cameraId) {
+    state.layout = state.previousLayout || state.config.cameraLayout || "five";
+    state.previousLayout = null;
+    state.focusedCameraId = state.config.primaryCameraId || state.config.focusedCameraId || cameraId;
+  } else {
+    if (state.layout !== "focus") {
+      state.previousLayout = state.layout;
+    }
+    state.focusedCameraId = cameraId;
+    state.layout = "focus";
+  }
+  renderAll(true);
   syncLayoutButtons();
 }
 
@@ -492,6 +504,7 @@ function bindEvents() {
   document.querySelectorAll("[data-layout]").forEach((button) => {
     button.addEventListener("click", () => {
       state.layout = button.dataset.layout;
+      state.previousLayout = null;
       renderAll(true);
     });
   });
@@ -516,6 +529,7 @@ function bindEvents() {
     if (event.key >= "1" && event.key <= "5") {
       const layouts = ["focus", "split", "grid4", "five", "five"];
       state.layout = layouts[Number(event.key) - 1];
+      state.previousLayout = null;
       renderAll(true);
     }
     if (event.key === "F6") {

@@ -136,6 +136,7 @@ Use the settings button, `F1`, or number keys:
 - `4` or `5`: five-camera mode with one large primary feed
 
 Click any camera tile to focus it.
+Click that focused camera again to return to the previous layout.
 
 The default normal layout is not a plain grid. With local media available, ClosetCast gives media the large center stage and compresses cameras into a left-side monitor strip. Without media, it uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Yankees mode keeps the stream dominant in the bottom-right while preserving the five cameras and dashboard cards around it. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
 

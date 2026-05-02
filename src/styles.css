@@ -151,10 +151,10 @@ h1 {
 }
 
 .mode-normal.has-ambient {
-  grid-template-columns: minmax(230px, 0.24fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.32fr);
   grid-template-rows: minmax(160px, auto) minmax(0, 1fr);
   grid-template-areas:
-    "info ambient"
+    "cameras info"
     "cameras ambient";
 }
 
@@ -249,18 +249,18 @@ h1 {
 }
 
 .mode-normal.has-ambient .camera-wall {
-  grid-template-columns: 1fr;
-  align-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
   overflow: hidden;
 }
 
 .mode-normal.has-ambient .camera-tile {
-  max-height: 14vh;
+  max-height: none;
 }
 
 .mode-normal.has-ambient .camera-mosaic .primary {
-  grid-column: auto;
-  grid-row: auto;
+  grid-column: span 2;
+  grid-row: span 1;
 }
 
 .mode-normal.has-ambient .info-rail {
@@ -610,6 +610,10 @@ h1 {
 
 .ambient-panel {
   grid-area: ambient;
+}
+
+.mode-normal.has-ambient .ambient-panel {
+  min-height: 0;
 }
 
 .stream-panel::after,

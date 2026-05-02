@@ -107,6 +107,11 @@ function createStreamServer(config, logger) {
       return;
     }
 
+    if (url.pathname === "/youtube-player") {
+      serveYouTubePlayer(url, response, `http://${host}:${port}`);
+      return;
+    }
+
     const match = url.pathname.match(/^\/camera\/(.+)\.mjpeg$/);
     if (!match) {
       response.writeHead(404, { "Content-Type": "text/plain" });
@@ -143,4 +148,62 @@ function createStreamServer(config, logger) {
   };
 }
 
-module.exports = { createStreamServer };
+function serveYouTubePlayer(url, response, origin) {
+  const target = normalizeYouTubeEmbedUrl(url.searchParams.get("src"), origin);
+  if (!target) {
+    response.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Invalid YouTube embed URL");
+    return;
+  }
+
+  response.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, private",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "default-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; style-src 'unsafe-inline';"
+  });
+  response.end(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050505; }
+    iframe { width: 100%; height: 100%; border: 0; display: block; background: #050505; }
+  </style>
+</head>
+<body>
+  <iframe
+    src="${escapeHtml(target)}"
+    allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen></iframe>
+</body>
+</html>`);
+}
+
+function normalizeYouTubeEmbedUrl(rawUrl, origin) {
+  try {
+    const target = new URL(rawUrl || "");
+    const hostname = target.hostname.replace(/^www\./, "");
+    const allowedHosts = new Set(["youtube.com", "youtube-nocookie.com"]);
+    if (!allowedHosts.has(hostname)) return "";
+    if (!target.pathname.startsWith("/embed/")) return "";
+    target.searchParams.set("origin", origin);
+    target.searchParams.set("widget_referrer", origin);
+    return target.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+module.exports = { createStreamServer, normalizeYouTubeEmbedUrl };

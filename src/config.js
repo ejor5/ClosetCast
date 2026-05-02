@@ -56,6 +56,7 @@ function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
     },
     configPath: config.__configPath,
     logFile,
+    localBaseUrl: streamBaseUrl,
     cameras: config.cameras
       .filter((camera) => camera.enabled !== false)
       .sort((a, b) => (a.priority || 99) - (b.priority || 99))

@@ -356,6 +356,10 @@ Check `calendar.enabled` and make sure the `.ics` URLs are reachable from the la
 
 That means YouTube did not expose a parseable first result to the lightweight resolver. The dashboard is still working; either leave it on the search page or add direct YouTube links under `ambientYouTube.directVideos`.
 
+**YouTube shows Error 153**
+
+ClosetCast serves YouTube embeds through a tiny local player wrapper so YouTube receives a normal embed origin/referrer. If you still see Error 153, restart ClosetCast so the new wrapper loads, then try the local UI test mode again.
+
 **Laptop does not wake at 9 AM**
 
 Confirm the `ClosetCast Wake` scheduled task exists, the laptop is plugged in, and Windows wake timers are enabled for the active power plan.

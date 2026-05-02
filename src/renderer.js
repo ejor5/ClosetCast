@@ -324,9 +324,10 @@ function renderAmbient() {
 
   elements.ambientTitle.textContent = ambient.title || "Ambient YouTube";
   elements.ambientStatus.textContent = ambient.error ? "Fallback" : ambient.source || ambient.message || "Rotating";
-  if (visible && ambient.url && state.loadedAmbientUrl !== ambient.url) {
-    elements.ambientView.src = ambient.url;
-    state.loadedAmbientUrl = ambient.url;
+  const targetAmbientUrl = getAmbientWebviewUrl(ambient.url);
+  if (visible && targetAmbientUrl && state.loadedAmbientUrl !== targetAmbientUrl) {
+    elements.ambientView.src = targetAmbientUrl;
+    state.loadedAmbientUrl = targetAmbientUrl;
   }
 }
 
@@ -608,7 +609,7 @@ function renderTraffic(traffic) {
 }
 
 function formatDegrees(value) {
-  return value === null || value === undefined ? "--" : `${value}°`;
+  return value === null || value === undefined ? "--" : `${value}F`;
 }
 
 function formatPercent(value) {
@@ -637,6 +638,26 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function getAmbientWebviewUrl(rawUrl) {
+  if (!rawUrl) return "";
+  if (!isYouTubeEmbedUrl(rawUrl)) return rawUrl;
+  const baseUrl = state.config.localBaseUrl;
+  if (!baseUrl) return rawUrl;
+  const url = new URL("/youtube-player", baseUrl);
+  url.searchParams.set("src", rawUrl);
+  return url.toString();
+}
+
+function isYouTubeEmbedUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const hostname = url.hostname.replace(/^www\./, "");
+    return (hostname === "youtube.com" || hostname === "youtube-nocookie.com") && url.pathname.startsWith("/embed/");
+  } catch (_) {
+    return false;
+  }
 }
 
 init().catch((error) => {

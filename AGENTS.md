@@ -36,7 +36,7 @@ ClosetCast is a lightweight Windows kiosk app for an old laptop. Keep the stack 
 - Keep `scripts/run-ui-test.ps1` safe: no fullscreen, no autostart, no wake task installation, and no sleep command.
 - `Test-ClosetCast.cmd` should remain the friendly local test entry point for pasting temporary RTSP/calendar links into `.closetcast-test/config.test.json`.
 - Layout code should stay in `src/layoutEngine.js` and mode/power decisions should stay in main-process services. Normal mode should give local media larger visual priority than cameras when media is available.
-- Ambient YouTube should stream in a webview only. Do not download video content. Prefer YouTube embed/player URLs so Mattercam-style live streams do not show chat or page chrome.
+- Ambient YouTube should stream in a webview only. Do not download video content. Prefer YouTube embed/player URLs through the local `/youtube-player` wrapper so Mattercam-style live streams do not show chat or page chrome and still provide a valid embed referrer.
 
 ## Validation
 

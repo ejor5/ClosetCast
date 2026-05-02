@@ -32,6 +32,7 @@ ClosetCast is a lightweight Windows kiosk app for an old laptop. Keep the stack 
 - Keep `Setup-ClosetCast.cmd` as the easiest user entry point. If setup requirements change, update the wizard and README together.
 - Keep `Install-ClosetCast.ps1` working as the one-command old-PC bootstrap from GitHub raw content.
 - Setup must write JSON without a UTF-8 BOM and must tolerate Apple `webcal://` calendar URLs.
+- Keep `scripts/run-ui-test.ps1` safe: no fullscreen, no autostart, no wake task installation, and no sleep command.
 - Layout code should stay in `src/layoutEngine.js` and mode/power decisions should stay in main-process services.
 - Ambient YouTube should stream in a webview only. Do not download video content.
 

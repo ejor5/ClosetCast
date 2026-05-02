@@ -83,6 +83,12 @@
       }
     ]
   },
+  "debug": {
+    "enabled": false,
+    "forceMode": "",
+    "ambientUrl": "",
+    "yankeesUrl": ""
+  },
   "streamServer": {
     "host": "127.0.0.1",
     "port": 4557

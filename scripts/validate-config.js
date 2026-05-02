@@ -84,6 +84,10 @@ if (config.ambientYouTube) {
   if (!Array.isArray(config.ambientYouTube.directVideos)) errors.push("ambientYouTube.directVideos must be an array");
 }
 
+if (config.debug) {
+  requireType("debug.enabled", config.debug.enabled, "boolean");
+}
+
 if (errors.length) {
   console.error(`Config validation failed for ${configPath}`);
   for (const error of errors) console.error(`- ${error}`);

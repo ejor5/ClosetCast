@@ -6,6 +6,7 @@ const state = {
   dayCycle: null,
   ambient: null,
   appMode: { mode: "normal", message: "Dashboard" },
+  localModeOverride: null,
   mediaFiles: [],
   mediaIndex: 0,
   layout: "five",
@@ -81,11 +82,13 @@ async function init() {
 
   setInterval(tickClock, 1000);
   setInterval(advanceMedia, Math.max(15, Number(state.config.media.rotationSeconds || 90)) * 1000);
+  applyInitialDebugMode();
 }
 
 function renderAll(forceCameras = false) {
+  const effectiveAppMode = getEffectiveAppMode();
   const layout = window.closetCastLayout.buildLayout({
-    appMode: state.appMode,
+    appMode: effectiveAppMode,
     cameraLayout: state.layout,
     cameras: state.config.cameras,
     focusedCameraId: state.focusedCameraId,
@@ -158,15 +161,16 @@ function renderCameras(layout) {
 }
 
 function renderChrome() {
-  const modeLabel = state.appMode.mode === "yankees"
+  const appMode = getEffectiveAppMode();
+  const modeLabel = appMode.mode === "yankees"
     ? "Yankees live"
-    : state.appMode.mode === "winddown"
+    : appMode.mode === "winddown"
       ? "Wind-down"
       : "Dashboard";
-  elements.modeStatus.textContent = `${modeLabel} - ${state.appMode.message || ""}`.trim();
+  elements.modeStatus.textContent = `${modeLabel} - ${appMode.message || ""}`.trim();
 
   if (state.dayCycle) {
-    elements.powerStatus.textContent = state.appMode.mode === "winddown"
+    elements.powerStatus.textContent = appMode.mode === "winddown"
       ? `Sleep in ${state.dayCycle.minutesUntilSleep} min`
       : `Next sleep ${state.dayCycle.nextSleepLabel} / wake ${state.dayCycle.nextWakeLabel}`;
   }
@@ -244,8 +248,8 @@ function renderYankees() {
     elements.gameTime.textContent = "";
   }
 
-  const shouldPrepare = yankees.mode === "preparing" || yankees.mode === "yankees";
-  const targetStreamUrl = yankees.streamUrl || state.config.yankees.streameastUrl;
+  const shouldPrepare = yankees.mode === "preparing" || yankees.mode === "yankees" || getEffectiveAppMode().mode === "yankees";
+  const targetStreamUrl = yankees.streamUrl || state.config.debug.yankeesUrl || state.config.yankees.streameastUrl;
   if (shouldPrepare && targetStreamUrl && state.loadedStreamUrl !== targetStreamUrl) {
     elements.streamView.src = targetStreamUrl;
     state.streamLoaded = true;
@@ -254,7 +258,7 @@ function renderYankees() {
 }
 
 function renderMedia() {
-  const mediaEnabled = state.config.media.enabled && state.config.media.showDuringCameraMode && state.mediaFiles.length > 0 && state.appMode.mode === "normal" && !state.ambient?.visible;
+  const mediaEnabled = state.config.media.enabled && state.config.media.showDuringCameraMode && state.mediaFiles.length > 0 && getEffectiveAppMode().mode === "normal" && !state.ambient?.visible;
   elements.mediaPanel.classList.toggle("hidden", !mediaEnabled);
   if (!mediaEnabled) return;
 
@@ -275,7 +279,7 @@ function renderMedia() {
 
 function renderAmbient() {
   const ambient = state.ambient;
-  const visible = Boolean(ambient?.visible && state.appMode.mode === "normal");
+  const visible = Boolean(ambient?.visible && getEffectiveAppMode().mode === "normal");
   elements.ambientPanel.classList.toggle("hidden", !visible);
   if (!ambient) return;
 
@@ -321,6 +325,49 @@ function applyAppModeState(nextState) {
   renderMedia();
 }
 
+function applyInitialDebugMode() {
+  if (!state.config.debug.enabled) return;
+  setDebugMode(state.config.debug.forceMode || "normal");
+}
+
+function cycleDebugMode() {
+  const modes = ["normal", "ambient", "yankees", "winddown"];
+  const currentMode = state.localModeOverride?.debugName || "normal";
+  const nextMode = modes[(modes.indexOf(currentMode) + 1) % modes.length];
+  setDebugMode(nextMode);
+}
+
+function setDebugMode(mode) {
+  if (!state.config.debug.enabled) return;
+  const normalized = mode === "ambient" ? "ambient" : mode === "yankees" ? "yankees" : mode === "winddown" ? "winddown" : "normal";
+  state.localModeOverride = {
+    mode: normalized === "ambient" ? "normal" : normalized,
+    debugName: normalized,
+    reason: "UI test override",
+    message: `UI test: ${normalized}`
+  };
+
+  if (normalized === "ambient") {
+    state.ambient = {
+      enabled: true,
+      visible: true,
+      title: "UI test ambiance",
+      url: state.config.debug.ambientUrl || "https://www.youtube.com/watch?v=9E-l9qYiqxQ&t=2725s&autoplay=1&mute=1",
+      source: "debug",
+      message: "UI test ambiance"
+    };
+  } else if (state.ambient?.source === "debug") {
+    state.ambient = { ...state.ambient, visible: false };
+  }
+
+  renderAll();
+  renderMedia();
+}
+
+function getEffectiveAppMode() {
+  return state.localModeOverride || state.appMode;
+}
+
 function applyAmbientState(nextState) {
   state.ambient = nextState;
   renderAll();
@@ -363,6 +410,9 @@ function bindEvents() {
       const layouts = ["focus", "split", "grid4", "five", "five"];
       state.layout = layouts[Number(event.key) - 1];
       renderAll(true);
+    }
+    if (event.key === "F6") {
+      cycleDebugMode();
     }
   });
 

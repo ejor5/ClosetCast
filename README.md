@@ -80,6 +80,29 @@ Manual path:
    npm.cmd start
    ```
 
+## Local UI Test Mode
+
+To test the dashboard without fullscreen, autostart, wake tasks, or sleep commands:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps1
+```
+
+That generates `.closetcast-test\config.test.json` and launches ClosetCast in a normal window. Press `F6` inside the app to cycle through:
+
+- normal dashboard
+- afternoon YouTube ambiance
+- Yankees mode
+- wind-down mode
+
+To start directly in one mode:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps1 -Mode yankees
+```
+
+Add `-UseExistingConfig` if you want the test run to use your real camera/calendar URLs while still disabling sleep/autostart behavior.
+
 ## Camera Config
 
 Each camera needs an `id`, `name`, `url`, `enabled`, and `priority`. The default priority is:

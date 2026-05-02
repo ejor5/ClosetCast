@@ -23,6 +23,7 @@ function loadConfig() {
   config.dayCycle = config.dayCycle || {};
   config.layout = config.layout || {};
   config.ambientYouTube = config.ambientYouTube || {};
+  config.debug = config.debug || {};
   config.streamServer = config.streamServer || {};
   config.cameras = Array.isArray(config.cameras) ? config.cameras : [];
 
@@ -86,6 +87,12 @@ function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
       startTime: config.ambientYouTube.startTime || "12:00",
       endTime: config.ambientYouTube.endTime || "22:00",
       rotationMinutes: Number(config.ambientYouTube.rotationMinutes || 45)
+    },
+    debug: {
+      enabled: Boolean(config.debug.enabled),
+      forceMode: config.debug.forceMode || "",
+      ambientUrl: config.debug.ambientUrl || "",
+      yankeesUrl: config.debug.yankeesUrl || config.yankees.streameastUrl || ""
     }
   };
 }

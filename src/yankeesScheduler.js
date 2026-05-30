@@ -1,4 +1,8 @@
 const { getYankeesStreamSiteUrl } = require("./config");
+const { redactUrl } = require("./logger");
+
+const DEFAULT_STREAM_LINK_PATTERNS = ["yankees", "new-york-yankees"];
+const TEMPORARY_STREAM_LINK_PATTERNS = ["giants", "san-francisco-giants", "sf-giants"];
 
 class YankeesScheduler {
   constructor(config, logger, onUpdate) {
@@ -8,6 +12,8 @@ class YankeesScheduler {
     this.onUpdate = onUpdate;
     this.timer = null;
     this.lastFetchAt = 0;
+    this.streamResolveInFlight = false;
+    this.lastStreamResolveAttemptAt = 0;
     this.state = {
       enabled: Boolean(this.config.enabled),
       mode: "dashboard",
@@ -97,7 +103,7 @@ class YankeesScheduler {
     const assumedDurationMs = Number(this.config.assumedGameDurationMinutes || 210) * 60_000;
     const gameStart = new Date(game.startTime);
     const windowStart = new Date(gameStart.getTime() - startBufferMs);
-    const prepareStart = new Date(gameStart.getTime() - prepareMs);
+    const prepareStart = new Date(windowStart.getTime() - prepareMs);
     const windowEnd = new Date(gameStart.getTime() + assumedDurationMs + endBufferMs);
 
     let mode = "dashboard";
@@ -120,6 +126,7 @@ class YankeesScheduler {
       game: {
         ...game,
         localStartTimeLabel: formatTime(gameStart),
+        prepareStart: prepareStart.toISOString(),
         windowStart: windowStart.toISOString(),
         windowEnd: windowEnd.toISOString()
       }
@@ -139,16 +146,32 @@ class YankeesScheduler {
     const currentUrl = this.state.streamUrl || "";
     const baseUrl = this.streamSiteUrl;
 
+    if (!baseUrl) {
+      this.publish({
+        streamUrl: "",
+        streamResolvedAt: null,
+        streamError: "No Yankees stream site URL configured",
+        message: this.state.mode === "yankees" ? "Yankees stream URL missing" : this.state.message
+      });
+      return;
+    }
+
+    if (this.streamResolveInFlight || Date.now() - this.lastStreamResolveAttemptAt < refreshMs) {
+      return;
+    }
+
     if (currentUrl && currentUrl !== baseUrl && Date.now() - resolvedAt < refreshMs) {
       return;
     }
 
     try {
-      this.logger.info("Resolving Yankees stream link", { source: baseUrl });
+      this.streamResolveInFlight = true;
+      this.lastStreamResolveAttemptAt = Date.now();
+      this.logger.info("Resolving Yankees stream link", { source: redactUrl(baseUrl) });
       const streamUrl = await resolveYankeesStreamLink({
         baseUrl,
         searchText: this.config.streamSearchText || "Yankees",
-        patterns: this.config.streamLinkPatterns || ["yankees", "new-york-yankees"]
+        patterns: this.config.streamLinkPatterns || DEFAULT_STREAM_LINK_PATTERNS
       });
       this.publish({
         streamUrl,
@@ -156,7 +179,7 @@ class YankeesScheduler {
         streamError: null,
         message: this.state.mode === "yankees" ? "Yankees stream resolved" : this.state.message
       });
-      this.logger.info("Yankees stream link resolved", { streamUrl });
+      this.logger.info("Yankees stream link resolved", { streamUrl: redactUrl(streamUrl) });
     } catch (error) {
       this.logger.warn("Yankees stream link resolution failed", { error: error.message });
       this.publish({
@@ -165,6 +188,8 @@ class YankeesScheduler {
         streamError: error.message,
         message: this.state.mode === "yankees" ? "Yankees stream link unavailable; showing base page" : this.state.message
       });
+    } finally {
+      this.streamResolveInFlight = false;
     }
   }
 
@@ -176,27 +201,35 @@ class YankeesScheduler {
 
 async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
   if (!baseUrl) throw new Error("No Yankees stream site URL configured");
-  const urls = uniqueUrls([
-    baseUrl,
-    safeUrl("/mlb/", baseUrl)
-  ]);
+  const urls = uniqueUrls([baseUrl]);
   let lastError = "";
 
   for (const url of urls) {
+    let timeout = null;
     try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(url, {
+        signal: controller.signal,
         headers: {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "User-Agent": "ClosetCast/0.1"
         }
       });
+      clearTimeout(timeout);
       if (!response.ok) throw new Error(`Stream page returned ${response.status}`);
       const html = await response.text();
       const match = findYankeesStreamLink(html, url, searchText, patterns);
       if (match) return match.href;
       lastError = `No Yankees link found on ${url}`;
     } catch (error) {
+      if (error.name === "AbortError") {
+        lastError = "Stream page request timed out";
+        continue;
+      }
       lastError = error.message;
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   }
 
@@ -204,7 +237,8 @@ async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
 }
 
 function findYankeesStreamLink(html, baseUrl, searchText = "Yankees", patterns = []) {
-  const normalizedPatterns = [searchText, ...patterns]
+  const configuredPatterns = Array.isArray(patterns) ? patterns : [];
+  const normalizedPatterns = [searchText, ...configuredPatterns, ...TEMPORARY_STREAM_LINK_PATTERNS]
     .filter(Boolean)
     .map((value) => normalizeText(value));
   const candidates = [];
@@ -264,14 +298,6 @@ function decodeHtml(value) {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
-}
-
-function safeUrl(pathname, baseUrl) {
-  try {
-    return new URL(pathname, baseUrl).toString();
-  } catch (_) {
-    return "";
-  }
 }
 
 function uniqueUrls(urls) {

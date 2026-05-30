@@ -15,7 +15,14 @@ const state = {
   streamLoaded: false,
   loadedStreamUrl: "",
   loadedAmbientUrl: "",
+  streamAutomationToken: 0,
+  streamFullscreenClicked: false,
+  yankeesResolveInFlight: false,
+  ambientLoadToken: 0,
+  ambientUnavailableUrl: "",
+  ambientUnavailableSkips: 0,
   lastLayoutKey: "",
+  cameraRenderToken: 0,
   cameraHealth: {}
 };
 
@@ -55,6 +62,7 @@ const elements = {
   settingsClose: document.querySelector("#settingsClose"),
   settingsPanel: document.querySelector("#settingsPanel"),
   fullscreenToggle: document.querySelector("#fullscreenToggle"),
+  refreshAmbient: document.querySelector("#refreshAmbient"),
   refreshSchedule: document.querySelector("#refreshSchedule"),
   openConfig: document.querySelector("#openConfig"),
   openLogs: document.querySelector("#openLogs"),
@@ -82,7 +90,7 @@ async function init() {
   tickClock();
 
   setInterval(tickClock, 1000);
-  setInterval(advanceMedia, Math.max(15, Number(state.config.media.rotationSeconds || 90)) * 1000);
+  setInterval(advanceMedia, getMediaRotationMs());
   applyInitialDebugMode();
 }
 
@@ -120,7 +128,12 @@ function renderAll(forceCameras = false) {
 }
 
 function renderCameras(layout) {
+  elements.cameraWall.querySelectorAll("img").forEach((image) => {
+    image.removeAttribute("src");
+  });
   elements.cameraWall.innerHTML = "";
+  state.cameraRenderToken += 1;
+  const renderToken = state.cameraRenderToken;
 
   layout.cameras.forEach((camera, index) => {
     const tile = document.createElement("article");
@@ -128,25 +141,52 @@ function renderCameras(layout) {
     tile.dataset.cameraId = camera.id;
 
     const image = document.createElement("img");
-    image.src = `${camera.streamUrl}?slot=${index}&t=${Date.now()}`;
     image.alt = `${camera.name} camera feed`;
-    image.addEventListener("error", () => {
-      state.cameraHealth[camera.id] = "reconnecting";
-      tile.classList.add("offline");
+    const label = document.createElement("div");
+    label.className = "camera-label";
+    label.innerHTML = `<span>${escapeHtml(camera.name)}</span><small>Connecting</small>`;
+    const labelStatus = label.querySelector("small");
+    let loadWatchdog = null;
+
+    const markCamera = (status) => {
+      state.cameraHealth[camera.id] = status;
+      tile.classList.toggle("offline", status !== "online");
+      tile.dataset.status = status === "no signal" ? "No signal" : "Reconnecting";
+      labelStatus.textContent = status === "online" ? "Live" : status === "no signal" ? "No signal" : "Retrying";
       updateCameraHealth();
+    };
+
+    const startLoadWatchdog = () => {
+      clearTimeout(loadWatchdog);
+      const timeoutSeconds = Number(state.config.streamServer?.firstFrameTimeoutSeconds || 15) + 3;
+      loadWatchdog = setTimeout(() => {
+        if (!tile.isConnected || (image.complete && image.naturalWidth > 0)) return;
+        markCamera("no signal");
+      }, Math.max(8000, timeoutSeconds * 1000));
+    };
+
+    const reloadImage = (reason) => {
+      markCamera(reason);
+      startLoadWatchdog();
+      const param = reason === "no signal" ? "timeout" : "retry";
+      image.src = withCameraParams(camera.streamUrl, {
+        slot: index,
+        view: renderToken,
+        [param]: Date.now()
+      });
+    };
+
+    image.addEventListener("error", () => {
+      markCamera("reconnecting");
       setTimeout(() => {
-        image.src = `${camera.streamUrl}?slot=${index}&retry=${Date.now()}`;
+        if (tile.isConnected) reloadImage("reconnecting");
       }, 7000);
     });
     image.addEventListener("load", () => {
-      state.cameraHealth[camera.id] = "online";
-      tile.classList.remove("offline");
-      updateCameraHealth();
+      clearTimeout(loadWatchdog);
+      markCamera("online");
     });
-
-    const label = document.createElement("div");
-    label.className = "camera-label";
-    label.innerHTML = `<span>${escapeHtml(camera.name)}</span><small>${escapeHtml(state.cameraHealth[camera.id] || "RTSP")}</small>`;
+    reloadImage("reconnecting");
 
     tile.append(image, label);
     tile.addEventListener("click", () => toggleCameraFocus(camera.id));
@@ -161,7 +201,7 @@ function toggleCameraFocus(cameraId) {
   if (state.layout === "focus" && state.focusedCameraId === cameraId) {
     state.layout = state.previousLayout || state.config.cameraLayout || "five";
     state.previousLayout = null;
-    state.focusedCameraId = state.config.primaryCameraId || state.config.focusedCameraId || cameraId;
+    state.focusedCameraId = null;
   } else {
     if (state.layout !== "focus") {
       state.previousLayout = state.layout;
@@ -187,12 +227,12 @@ function renderChrome() {
       ? `Sleep in ${state.dayCycle.minutesUntilSleep} min`
       : `Next sleep ${state.dayCycle.nextSleepLabel} / wake ${state.dayCycle.nextWakeLabel}`;
   }
+  syncModeButtons();
 }
 
 function renderWeather() {
   const weatherState = state.weather;
   const weather = weatherState?.weather;
-  const traffic = weatherState?.traffic;
 
   if (!weatherState?.enabled) {
     elements.weatherBadge.textContent = "Disabled";
@@ -206,43 +246,14 @@ function renderWeather() {
     elements.weatherHeadline.textContent = weatherState.message || "Weather unavailable";
     elements.weatherDetails.innerHTML = [
       `<p class="weather-error">${escapeHtml(weatherState.error || "Waiting for weather")}</p>`,
-      renderTraffic(traffic)
+      renderTraffic(weatherState.traffic)
     ].join("");
     return;
   }
 
-  elements.weatherBadge.textContent = weather.label || weather.condition || "Today";
-  elements.weatherHeadline.textContent = weather.locationName;
-  elements.weatherDetails.innerHTML = `
-    <div class="weather-hero">
-      <div class="weather-temps">
-        <div class="temp-pair">
-          <span>Hi</span>
-          <strong>${formatDegrees(weather.high)}</strong>
-        </div>
-        <div class="temp-pair low">
-          <span>Lo</span>
-          <strong>${formatDegrees(weather.low)}</strong>
-        </div>
-      </div>
-      <div class="weather-now">
-        <span>${escapeHtml(weather.condition)}</span>
-        <strong>${formatDegrees(weather.currentTemp)} now</strong>
-        <small>${weather.feelsLike === null || weather.feelsLike === undefined ? "" : `Feels ${formatDegrees(weather.feelsLike)}`}</small>
-      </div>
-    </div>
-    <div class="weather-metrics">
-      <div class="metric-card rain">
-        <span>Rain</span>
-        <strong>${formatPercent(weather.rainChance)}</strong>
-      </div>
-      <div class="metric-card wind">
-        <span>Wind</span>
-        <strong>${formatSpeed(weather.wind)}</strong>
-      </div>
-    </div>
-    ${renderTraffic(traffic)}
-  `;
+  elements.weatherBadge.textContent = `Rain ${formatPercent(weather.rainChance)}`;
+  elements.weatherHeadline.textContent = formatDegrees(weather.currentTemp);
+  elements.weatherDetails.innerHTML = renderWeatherDetails(weather, weatherState.traffic);
 }
 
 function renderCalendar() {
@@ -290,11 +301,89 @@ function renderYankees() {
 
   const shouldPrepare = yankees.mode === "preparing" || yankees.mode === "yankees" || getEffectiveAppMode().mode === "yankees";
   const targetStreamUrl = yankees.streamUrl || state.config.debug.yankeesUrl || state.config.yankees.streamSiteUrl;
-  if (shouldPrepare && targetStreamUrl && state.loadedStreamUrl !== targetStreamUrl) {
+  if (shouldPrepare && !targetStreamUrl) {
+    elements.streamPanel.dataset.status = yankees.streamError || "Add Yankees stream URL in config";
+    elements.streamPanel.classList.add("stream-unavailable");
+    state.loadedStreamUrl = "";
+    elements.streamView.removeAttribute("src");
+  } else if (shouldPrepare && targetStreamUrl && state.loadedStreamUrl !== targetStreamUrl) {
+    elements.streamPanel.dataset.status = "Loading Yankees stream";
+    elements.streamPanel.classList.remove("stream-unavailable");
     elements.streamView.src = targetStreamUrl;
     state.streamLoaded = true;
     state.loadedStreamUrl = targetStreamUrl;
+    state.streamFullscreenClicked = false;
+    state.streamAutomationToken += 1;
   }
+}
+
+function scheduleYankeesFullscreenClick(delayMs = 0) {
+  const token = state.streamAutomationToken;
+  setTimeout(() => {
+    if (token !== state.streamAutomationToken) return;
+    clickYankeesFullscreenIfVisible().catch(() => {});
+  }, delayMs);
+}
+
+async function clickYankeesFullscreenIfVisible() {
+  if (!elements.streamView.src || elements.streamPanel.classList.contains("hidden") || state.streamFullscreenClicked) return;
+  const result = await elements.streamView.executeJavaScript(`(${clickFullscreenInPage.toString()})()`, true);
+  if (result?.clickedFullscreen || result?.alreadyFullscreen) {
+    state.streamFullscreenClicked = true;
+  }
+}
+
+function clickFullscreenInPage() {
+  const isVisible = (element) => {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    return rect.width > 0
+      && rect.height > 0
+      && centerX >= 0
+      && centerY >= 0
+      && centerX <= window.innerWidth
+      && centerY <= window.innerHeight
+      && style.visibility !== "hidden"
+      && style.display !== "none"
+      && Number(style.opacity || 1) > 0;
+  };
+
+  const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const describe = (element) => normalize([
+    element.textContent,
+    element.getAttribute("aria-label"),
+    element.getAttribute("title"),
+    element.getAttribute("class"),
+    element.getAttribute("id"),
+    element.getAttribute("data-title"),
+    element.getAttribute("data-tooltip"),
+    element.getAttribute("data-testid")
+  ].filter(Boolean).join(" "));
+  const isFullscreenButton = (element) => {
+    const label = describe(element);
+    if (!label || /\b(exit|restore|windowed)\b/.test(label)) return false;
+    return /\b(fullscreen|full screen|full screen button|enter fullscreen|enter full screen|vjs fullscreen control|jw icon fullscreen|ytp fullscreen button)\b/.test(label);
+  };
+
+  if (document.fullscreenElement) {
+    return { clickedFullscreen: false, alreadyFullscreen: true };
+  }
+
+  const candidates = [
+    ...document.querySelectorAll("button, [role='button'], [aria-label], [title], .vjs-fullscreen-control, .jw-icon-fullscreen, .ytp-fullscreen-button")
+  ].filter((element, index, list) => list.indexOf(element) === index);
+
+  for (const element of candidates) {
+    const button = element.closest("button, [role='button']") || element;
+    if (isVisible(button) && isFullscreenButton(button)) {
+      button.click();
+      return { clickedFullscreen: true };
+    }
+  }
+
+  return { clickedFullscreen: false };
 }
 
 function renderMedia() {
@@ -340,13 +429,91 @@ function renderAmbient() {
   if (visible && targetAmbientUrl && state.loadedAmbientUrl !== targetAmbientUrl) {
     elements.ambientView.src = targetAmbientUrl;
     state.loadedAmbientUrl = targetAmbientUrl;
+    state.ambientLoadToken += 1;
+    state.ambientUnavailableUrl = "";
   }
+}
+
+function scheduleAmbientUnavailableCheck(delayMs, resetOnClear = false) {
+  const token = state.ambientLoadToken;
+  setTimeout(() => {
+    if (token !== state.ambientLoadToken) return;
+    checkAmbientUnavailable(resetOnClear).catch(() => {});
+  }, delayMs);
+}
+
+async function checkAmbientUnavailable(resetOnClear = false) {
+  if (!elements.ambientView.src || elements.ambientPanel.classList.contains("hidden")) return;
+  const result = await elements.ambientView.executeJavaScript(`(${detectAmbientUnavailableInPage.toString()})()`, true);
+  if (result?.unavailable) {
+    refreshAmbientAfterUnavailable(result.reason || "Ambient YouTube video unavailable");
+  } else if (resetOnClear) {
+    state.ambientUnavailableSkips = 0;
+  }
+}
+
+function detectAmbientUnavailableInPage() {
+  const status = window.__closetCastYouTubeStatus;
+  if (status?.unavailable) {
+    return { unavailable: true, reason: status.reason || "YouTube player error" };
+  }
+  if (status && !status.playing && Date.now() - Number(status.startedAt || status.updatedAt || Date.now()) > 22000) {
+    return { unavailable: true, reason: status.reason || "YouTube stayed black or did not start" };
+  }
+
+  const text = String(document.body?.innerText || document.documentElement?.innerText || "").toLowerCase();
+  const unavailable = [
+    "video unavailable",
+    "this video is unavailable",
+    "video unavalible",
+    "watch on youtube",
+    "watch this video on youtube",
+    "playback error",
+    "an error occurred"
+  ].some((phrase) => text.includes(phrase));
+  return {
+    unavailable,
+    reason: unavailable ? "YouTube unavailable page" : ""
+  };
+}
+
+function refreshAmbientAfterUnavailable(reason) {
+  const url = state.loadedAmbientUrl || elements.ambientView.src;
+  if (!url || state.ambientUnavailableUrl === url) return;
+  if (state.ambientUnavailableSkips >= 8) {
+    elements.ambientStatus.textContent = "Video unavailable";
+    return;
+  }
+
+  state.ambientUnavailableUrl = url;
+  state.ambientUnavailableSkips += 1;
+  elements.ambientStatus.textContent = "Picking next";
+  elements.ambientPanel.dataset.status = "Picking another Disney stream";
+  elements.ambientPanel.classList.add("stream-unavailable");
+  if (window.closetCast.reportAmbientFailure) {
+    window.closetCast.reportAmbientFailure(url, reason).catch(() => {});
+  }
+  window.closetCast.refreshAmbient().then((nextState) => {
+    if (nextState) {
+      state.ambient = nextState;
+      renderAll();
+    }
+  }).catch((error) => {
+    elements.ambientStatus.textContent = reason || error.message || "Video unavailable";
+  });
 }
 
 function advanceMedia() {
   if (!state.mediaFiles.length) return;
   state.mediaIndex = (state.mediaIndex + 1) % state.mediaFiles.length;
   renderMedia();
+}
+
+function getMediaRotationMs() {
+  const configuredSeconds = Number(state.config?.media?.rotationSeconds || 20);
+  const seconds = Number.isFinite(configuredSeconds) ? configuredSeconds : 20;
+  const clampedSeconds = Math.min(30, Math.max(8, seconds));
+  return clampedSeconds * 1000;
 }
 
 function applyYankeesState(nextState) {
@@ -390,7 +557,6 @@ function cycleDebugMode() {
 }
 
 function setDebugMode(mode) {
-  if (!state.config.debug.enabled) return;
   const normalized = mode === "ambient" ? "ambient" : mode === "yankees" ? "yankees" : mode === "winddown" ? "winddown" : "normal";
   state.localModeOverride = {
     mode: normalized === "ambient" ? "normal" : normalized,
@@ -432,7 +598,7 @@ function setDebugMode(mode) {
         renderAmbient();
       });
     }
-  } else if (state.ambient?.source === "debug") {
+  } else if (state.ambient) {
     state.ambient = { ...state.ambient, visible: false };
   }
 
@@ -442,10 +608,54 @@ function setDebugMode(mode) {
 
   renderAll();
   renderMedia();
+  syncModeButtons();
+}
+
+async function refreshAmbientNow() {
+  const originalLabel = elements.refreshAmbient.textContent;
+  elements.refreshAmbient.disabled = true;
+  elements.refreshAmbient.textContent = "Picking...";
+  try {
+    const nextState = await window.closetCast.refreshAmbient();
+    if (nextState) {
+      applyAmbientState(nextState);
+    }
+  } catch (error) {
+    state.ambient = {
+      ...(state.ambient || {}),
+      enabled: true,
+      visible: state.localModeOverride?.debugName === "ambient",
+      error: error.message,
+      message: "Ambient refresh failed"
+    };
+    renderAmbient();
+  } finally {
+    elements.refreshAmbient.disabled = false;
+    elements.refreshAmbient.textContent = originalLabel;
+  }
 }
 
 function forceResolveYankeesStream() {
+  if (state.yankeesResolveInFlight) return;
   const baseUrl = state.config.yankees.streamSiteUrl || state.config.debug.yankeesUrl;
+  if (!baseUrl) {
+    state.yankees = {
+      ...(state.yankees || {}),
+      enabled: true,
+      mode: "yankees",
+      message: "UI test: Yankees stream URL missing",
+      streamUrl: "",
+      streamError: "Add yankees.streamSiteUrl in config or paste it in Test-ClosetCast.cmd",
+      game: state.yankees?.game || {
+        awayTeam: "New York Yankees",
+        homeTeam: "Stream test",
+        status: "Needs URL",
+        localStartTimeLabel: "Now"
+      }
+    };
+    renderYankees();
+    return;
+  }
   state.yankees = {
     ...(state.yankees || {}),
     enabled: true,
@@ -462,6 +672,7 @@ function forceResolveYankeesStream() {
   };
   renderYankees();
 
+  state.yankeesResolveInFlight = true;
   window.closetCast.resolveYankeesStream().then((nextState) => {
     if (state.localModeOverride?.debugName === "yankees" && nextState) {
       applyYankeesState({ ...nextState, mode: "yankees" });
@@ -474,6 +685,8 @@ function forceResolveYankeesStream() {
       message: "UI test: Yankees resolver failed; showing base page"
     };
     renderYankees();
+  }).finally(() => {
+    state.yankeesResolveInFlight = false;
   });
 }
 
@@ -491,6 +704,7 @@ function bindEvents() {
   elements.settingsToggle.addEventListener("click", () => elements.settingsPanel.classList.toggle("hidden"));
   elements.settingsClose.addEventListener("click", () => elements.settingsPanel.classList.add("hidden"));
   elements.fullscreenToggle.addEventListener("click", () => window.closetCast.setFullscreen(true));
+  elements.refreshAmbient.addEventListener("click", refreshAmbientNow);
   elements.refreshSchedule.addEventListener("click", () => window.closetCast.refreshSchedule());
   elements.openConfig.addEventListener("click", () => window.closetCast.openConfigFolder());
   elements.openLogs.addEventListener("click", () => window.closetCast.openLogsFolder());
@@ -505,21 +719,42 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.layout = button.dataset.layout;
       state.previousLayout = null;
+      if (state.layout !== "focus") {
+        state.focusedCameraId = null;
+      } else if (!state.focusedCameraId) {
+        state.focusedCameraId = state.config.primaryCameraId || state.config.focusedCameraId;
+      }
       renderAll(true);
     });
   });
 
+  document.querySelectorAll("[data-test-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setDebugMode(button.dataset.testMode);
+    });
+  });
+
   elements.streamView.addEventListener("did-fail-load", () => {
+    elements.streamPanel.dataset.status = "Yankees stream failed to load";
     elements.streamPanel.classList.add("stream-unavailable");
   });
   elements.streamView.addEventListener("did-finish-load", () => {
     elements.streamPanel.classList.remove("stream-unavailable");
+    [0, 1000, 3000, 8000].forEach(scheduleYankeesFullscreenClick);
   });
-  elements.ambientView.addEventListener("did-fail-load", () => {
+  elements.ambientView.addEventListener("did-fail-load", (event) => {
+    if (event.errorCode === -3) return;
+    elements.ambientPanel.dataset.status = "Ambient YouTube failed to load";
     elements.ambientPanel.classList.add("stream-unavailable");
+    refreshAmbientAfterUnavailable("Ambient YouTube failed to load");
   });
   elements.ambientView.addEventListener("did-finish-load", () => {
     elements.ambientPanel.classList.remove("stream-unavailable");
+    scheduleAmbientUnavailableCheck(1800);
+    scheduleAmbientUnavailableCheck(5000);
+    scheduleAmbientUnavailableCheck(10000, true);
+    scheduleAmbientUnavailableCheck(17000);
+    scheduleAmbientUnavailableCheck(24000);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -530,6 +765,11 @@ function bindEvents() {
       const layouts = ["focus", "split", "grid4", "five", "five"];
       state.layout = layouts[Number(event.key) - 1];
       state.previousLayout = null;
+      if (state.layout !== "focus") {
+        state.focusedCameraId = null;
+      } else if (!state.focusedCameraId) {
+        state.focusedCameraId = state.config.primaryCameraId || state.config.focusedCameraId;
+      }
       renderAll(true);
     }
     if (event.key === "F6") {
@@ -553,16 +793,12 @@ function bindEvents() {
 
 function updateCameraHealth() {
   const total = state.config?.cameras?.length || 0;
-  const reconnecting = Object.values(state.cameraHealth).filter((status) => status === "reconnecting").length;
-  elements.cameraHealth.textContent = reconnecting
-    ? `${reconnecting}/${total} reconnecting`
+  const statuses = Object.values(state.cameraHealth);
+  const offline = statuses.filter((status) => status && status !== "online").length;
+  elements.cameraHealth.textContent = offline
+    ? `${offline}/${total} need attention`
     : `${total} cameras online`;
 
-  document.querySelectorAll(".camera-tile").forEach((tile) => {
-    const cameraId = tile.dataset.cameraId;
-    const label = tile.querySelector(".camera-label small");
-    if (label) label.textContent = state.cameraHealth[cameraId] || "RTSP";
-  });
 }
 
 function renderCalendarEvent(event) {
@@ -596,11 +832,55 @@ function formatEventTime(event) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(event.startTime));
 }
 
+function renderWeatherDetails(weather, traffic) {
+  return `
+    <div class="weather-ambient-strip">
+      <span>Hi <strong>${escapeHtml(formatDegrees(weather.high))}</strong></span>
+      <span>Lo <strong>${escapeHtml(formatDegrees(weather.low))}</strong></span>
+    </div>
+    <section class="weather-hero">
+      <div class="weather-temps">
+        <div class="temp-pair high">
+          <span>High</span>
+          <strong>${escapeHtml(formatDegrees(weather.high))}</strong>
+        </div>
+        <div class="temp-pair low">
+          <span>Low</span>
+          <strong>${escapeHtml(formatDegrees(weather.low))}</strong>
+        </div>
+      </div>
+      <div class="weather-now">
+        <span>Now</span>
+        <strong>${escapeHtml(weather.condition || "Weather")}</strong>
+        <small>Feels ${escapeHtml(formatDegrees(weather.feelsLike))}</small>
+      </div>
+    </section>
+    <section class="weather-metrics">
+      <div class="metric-card rain">
+        <span>Rain</span>
+        <strong>${escapeHtml(formatPercent(weather.rainChance))}</strong>
+      </div>
+      <div class="metric-card wind">
+        <span>Wind</span>
+        <strong>${escapeHtml(formatSpeed(weather.wind))}</strong>
+      </div>
+    </section>
+    <section class="clothing-card">
+      <span>${escapeHtml(weather.locationName || "Weather")}</span>
+      <strong>${escapeHtml(weather.clothing || "Comfort layers")}</strong>
+    </section>
+    ${renderTraffic(traffic)}
+  `;
+}
+
 function renderTraffic(traffic) {
   if (!traffic || !traffic.enabled) return "";
+  const routes = Array.isArray(traffic.routes) ? traffic.routes : [];
   const items = traffic.items || [];
-  const itemMarkup = items.length
-    ? items.map((item) => `<li>${escapeHtml(item.text)}</li>`).join("")
+  const itemMarkup = routes.length
+    ? routes.map(renderTrafficRoute).join("")
+    : items.length
+    ? items.map(renderTrafficItem).join("")
     : `<li>${escapeHtml(traffic.detail || "No matching incidents found")}</li>`;
   const updated = traffic.updatedAt ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(traffic.updatedAt)) : "live view";
   const quickMap = traffic.quickMapUrl
@@ -619,6 +899,31 @@ function renderTraffic(traffic) {
         <span>${escapeHtml(updated)}</span>
       </div>
     </section>
+  `;
+}
+
+function renderTrafficRoute(route) {
+  const items = route.items || [];
+  const incidentMarkup = items.length
+    ? items.map((item) => renderTrafficItem(item, route.label)).join("")
+    : `<li class="traffic-incident clear"><span>${escapeHtml(route.label)}</span>No matching incidents</li>`;
+  return `
+    <li class="traffic-route-item">
+      <span>${escapeHtml(route.label)}</span>
+      <strong>${escapeHtml(route.headline || "Traffic")}</strong>
+    </li>
+    ${incidentMarkup}
+  `;
+}
+
+function renderTrafficItem(item, routeLabel = item.routeLabel) {
+  const direction = item.direction ? ` ${item.direction}` : "";
+  const label = routeLabel ? `${routeLabel}${direction}` : direction.trim();
+  return `
+    <li class="traffic-incident">
+      ${label ? `<span>${escapeHtml(label)}</span>` : ""}
+      ${escapeHtml(item.text)}
+    </li>
   `;
 }
 
@@ -646,12 +951,27 @@ function syncLayoutButtons() {
   });
 }
 
+function syncModeButtons() {
+  const activeMode = state.localModeOverride?.debugName || getEffectiveAppMode().mode || "normal";
+  document.querySelectorAll("[data-test-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.testMode === activeMode);
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function withCameraParams(rawUrl, params) {
+  const separator = rawUrl.includes("?") ? "&" : "?";
+  const query = Object.entries(params)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+  return `${rawUrl}${separator}${query}`;
 }
 
 function getAmbientWebviewUrl(rawUrl) {

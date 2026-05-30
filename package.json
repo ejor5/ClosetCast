@@ -11,6 +11,7 @@
     "dev": "electron . --dev",
     "lint": "node scripts/lint.js",
     "test": "node scripts/test.js",
+    "diagnose:rtsp": "node scripts/check-rtsp.js",
     "validate:config": "node scripts/validate-config.js config.example.json",
     "build": "electron-builder --win portable"
   },
@@ -24,6 +25,7 @@
     "files": [
       "src/**/*",
       "config.example.json",
+      "config.private.example.json",
       "media/.gitkeep",
       "README.md",
       "AGENTS.md"

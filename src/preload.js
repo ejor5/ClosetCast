@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("closetCast", {
   refreshSchedule: () => ipcRenderer.invoke("closetcast:refresh-schedule"),
   resolveYankeesStream: () => ipcRenderer.invoke("closetcast:resolve-yankees-stream"),
   refreshAmbient: () => ipcRenderer.invoke("closetcast:refresh-ambient"),
+  reportAmbientFailure: (url, reason) => ipcRenderer.invoke("closetcast:report-ambient-failure", url, reason),
   setFullscreen: (enabled) => ipcRenderer.invoke("closetcast:set-fullscreen", enabled),
   openConfigFolder: () => ipcRenderer.invoke("closetcast:open-config-folder"),
   openLogsFolder: () => ipcRenderer.invoke("closetcast:open-logs-folder"),

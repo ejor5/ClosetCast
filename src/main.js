@@ -1,7 +1,7 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, powerMonitor, shell } = require("electron");
 const { getYankeesStreamSiteUrl, loadConfig, getPublicConfig } = require("./config");
-const { createLogger } = require("./logger");
+const { createLogger, redactUrl } = require("./logger");
 const { listMediaFiles } = require("./mediaLibrary");
 const { createStreamServer } = require("./streamServer");
 const { YankeesScheduler, resolveYankeesStreamLink } = require("./yankeesScheduler");
@@ -27,6 +27,8 @@ let latestDayCycleState = null;
 let latestAmbientState = null;
 let latestAppModeState = null;
 let lastLoggedAppMode = null;
+let uiYankeesResolveInFlight = false;
+let lastUiYankeesResolveAt = 0;
 
 if (process.env.CLOSETCAST_USER_DATA_DIR) {
   app.setPath("userData", path.resolve(process.env.CLOSETCAST_USER_DATA_DIR));
@@ -136,6 +138,13 @@ async function createWindow() {
     logger.info("Blocked popup from embedded page", { url });
     return { action: "deny" };
   });
+
+  mainWindow.webContents.on("did-attach-webview", (_event, webContents) => {
+    webContents.setWindowOpenHandler(({ url }) => {
+      logger.info("Blocked popup from stream webview", { url });
+      return { action: "deny" };
+    });
+  });
 }
 
 if (gotLock) {
@@ -215,8 +224,50 @@ ipcMain.handle("closetcast:resolve-yankees-stream", async () => {
   }
 
   const baseUrl = getYankeesStreamSiteUrl(config.yankees);
+  const refreshMs = Number(config.yankees.streamLinkRefreshMinutes || 20) * 60_000;
+  if (!baseUrl) {
+    latestYankeesState = {
+      ...(latestYankeesState || {}),
+      enabled: true,
+      mode: "yankees",
+      message: "UI test: Yankees stream URL missing",
+      streamUrl: "",
+      streamResolvedAt: null,
+      streamError: "Add yankees.streamSiteUrl in config or paste it in Test-ClosetCast.cmd",
+      game: latestYankeesState?.game || {
+        awayTeam: "New York Yankees",
+        homeTeam: "Stream test",
+        status: "Needs URL",
+        localStartTimeLabel: "Now"
+      }
+    };
+    logger.warn("Yankees stream resolver skipped; no stream site URL configured");
+    mainWindow.webContents.send("closetcast:yankees-state", latestYankeesState);
+    return latestYankeesState;
+  }
+
+  if (uiYankeesResolveInFlight || Date.now() - lastUiYankeesResolveAt < refreshMs) {
+    latestYankeesState = {
+      ...(latestYankeesState || {}),
+      enabled: true,
+      mode: "yankees",
+      message: "UI test: Yankees resolver cooling down",
+      streamUrl: latestYankeesState?.streamUrl || baseUrl,
+      game: latestYankeesState?.game || {
+        awayTeam: "New York Yankees",
+        homeTeam: "Stream test",
+        status: "Cooldown",
+        localStartTimeLabel: "Now"
+      }
+    };
+    mainWindow.webContents.send("closetcast:yankees-state", latestYankeesState);
+    return latestYankeesState;
+  }
+
   try {
-    logger.info("Resolving Yankees stream link for UI test", { source: baseUrl });
+    uiYankeesResolveInFlight = true;
+    lastUiYankeesResolveAt = Date.now();
+    logger.info("Resolving Yankees stream link for UI test", { source: redactUrl(baseUrl) });
     const streamUrl = await resolveYankeesStreamLink({
       baseUrl,
       searchText: config.yankees.streamSearchText || "Yankees",
@@ -258,6 +309,8 @@ ipcMain.handle("closetcast:resolve-yankees-stream", async () => {
     };
     mainWindow.webContents.send("closetcast:yankees-state", latestYankeesState);
     return latestYankeesState;
+  } finally {
+    uiYankeesResolveInFlight = false;
   }
 });
 
@@ -265,6 +318,12 @@ ipcMain.handle("closetcast:refresh-ambient", async () => {
   if (!ambientYouTubeService) return latestAmbientState;
   await ambientYouTubeService.refresh();
   return latestAmbientState;
+});
+
+ipcMain.handle("closetcast:report-ambient-failure", (_event, url, reason) => {
+  if (!ambientYouTubeService) return false;
+  ambientYouTubeService.reportFailure(url, reason);
+  return true;
 });
 
 ipcMain.handle("closetcast:set-fullscreen", (_event, enabled) => {

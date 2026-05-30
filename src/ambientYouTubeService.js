@@ -6,7 +6,7 @@ class AmbientYouTubeService {
       enabled: true,
       startTime: "12:00",
       endTime: "22:00",
-      rotationMinutes: 45,
+      rotationMinutes: 30,
       resolveRefreshHours: 12,
       fallbackToSearchPage: true,
       ...config.ambientYouTube
@@ -14,7 +14,10 @@ class AmbientYouTubeService {
     this.logger = logger;
     this.onUpdate = onUpdate;
     this.timer = null;
+    this.refreshQueue = Promise.resolve();
     this.history = [];
+    this.failedItemKeys = new Set();
+    this.failedUrls = new Set();
     this.resolvedCache = new Map();
     this.state = {
       enabled: Boolean(this.config.enabled),
@@ -25,7 +28,8 @@ class AmbientYouTubeService {
       source: "",
       message: "Ambient YouTube idle",
       error: null,
-      resolvedAt: null
+      resolvedAt: null,
+      itemKey: ""
     };
   }
 
@@ -36,7 +40,7 @@ class AmbientYouTubeService {
     }
 
     this.refresh();
-    const minutes = Math.max(5, Number(this.config.rotationMinutes || 45));
+    const minutes = Math.max(5, Number(this.config.rotationMinutes || 30));
     this.timer = setInterval(() => this.refresh(), minutes * 60_000);
   }
 
@@ -45,27 +49,33 @@ class AmbientYouTubeService {
   }
 
   async refresh() {
+    const nextRefresh = this.refreshQueue.then(() => this.refreshOnce(), () => this.refreshOnce());
+    this.refreshQueue = nextRefresh.catch(() => {});
+    return nextRefresh;
+  }
+
+  async refreshOnce() {
     const now = new Date();
     if (!isWithinAmbientWindow(now, this.config)) {
       this.publish({
         visible: false,
         message: "Ambient YouTube outside display hours"
       });
-      return;
+      return this.state;
     }
 
-    const item = chooseAmbientItem(this.config, this.history);
+    const item = chooseAmbientItem(this.config, this.history, this.failedItemKeys, this.failedUrls);
     if (!item) {
       this.publish({
         visible: false,
         message: "No ambient YouTube items configured"
       });
-      return;
+      return this.state;
     }
 
+    remember(this.history, item.key, Number(this.config.recentHistorySize || 10));
     try {
       const resolved = await resolveAmbientItem(item, this.config, this.resolvedCache);
-      remember(this.history, item.key, Number(this.config.recentHistorySize || 4));
       this.logger.info("Ambient YouTube item selected", { title: resolved.title, source: resolved.source });
       this.publish({
         enabled: true,
@@ -76,8 +86,10 @@ class AmbientYouTubeService {
         source: resolved.source,
         message: resolved.message,
         error: null,
-        resolvedAt: new Date().toISOString()
+        resolvedAt: new Date().toISOString(),
+        itemKey: item.key
       });
+      return this.state;
     } catch (error) {
       this.logger.warn("Ambient YouTube resolution failed", { error: error.message, title: item.title });
       this.publish({
@@ -89,9 +101,26 @@ class AmbientYouTubeService {
         source: "fallback",
         message: "Using fallback YouTube page",
         error: error.message,
-        resolvedAt: null
+        resolvedAt: null,
+        itemKey: item.key
       });
+      return this.state;
     }
+  }
+
+  reportFailure(url, reason) {
+    const failedUrl = normalizeFailureUrl(url);
+    if (this.state.itemKey) this.failedItemKeys.add(this.state.itemKey);
+    if (failedUrl) this.failedUrls.add(failedUrl);
+    for (const [key, cached] of this.resolvedCache.entries()) {
+      if (normalizeFailureUrl(cached.url) === failedUrl) this.resolvedCache.delete(key);
+    }
+    this.logger.warn("Ambient YouTube item marked failed", {
+      title: this.state.title,
+      reason,
+      itemKey: this.state.itemKey,
+      url: failedUrl
+    });
   }
 
   publish(patch) {
@@ -174,17 +203,26 @@ function findFirstYouTubeVideoId(html) {
   return null;
 }
 
-function chooseAmbientItem(config, history) {
+function chooseAmbientItem(config, history, failedItemKeys = new Set(), failedUrls = new Set()) {
   const items = [
     ...(config.directVideos || []).map((item, index) => ({ ...item, key: `direct:${index}:${item.url}` })),
     ...(config.searchTopics || []).map((item, index) => ({ ...item, key: `search:${index}:${item.query || item.title}` }))
   ].filter((item) => item.enabled !== false);
 
   if (!items.length) return null;
-  const fresh = items.filter((item) => !history.includes(item.key));
-  const pool = fresh.length ? fresh : items;
+  const available = items.filter((item) => !failedItemKeys.has(item.key) && !(item.url && failedUrls.has(normalizeFailureUrl(item.url))));
+  const selectable = available.length ? available : items;
+  const fresh = selectable.filter((item) => !history.includes(item.key));
+  const pool = weightedPool(fresh.length ? fresh : selectable);
   const index = Math.floor(Math.random() * pool.length);
   return pool[index];
+}
+
+function weightedPool(items) {
+  return items.flatMap((item) => {
+    const weight = Math.min(8, Math.max(1, Math.round(Number(item.weight || 1))));
+    return Array.from({ length: weight }, () => item);
+  });
 }
 
 function remember(history, key, limit) {
@@ -215,6 +253,18 @@ function withAutoplay(rawUrl, config) {
     return url.toString();
   } catch (_) {
     return rawUrl;
+  }
+}
+
+function normalizeFailureUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl || "");
+    const wrapperSource = url.pathname === "/youtube-player" ? url.searchParams.get("src") : "";
+    const normalized = new URL(toYouTubeEmbedUrl(wrapperSource || rawUrl));
+    ["autoplay", "mute", "origin", "widget_referrer", "enablejsapi"].forEach((key) => normalized.searchParams.delete(key));
+    return normalized.toString();
+  } catch (_) {
+    return String(rawUrl || "");
   }
 }
 

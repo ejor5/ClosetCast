@@ -44,7 +44,7 @@
             </article>
           </aside>
 
-          <section id="streamPanel" class="stream-panel hidden">
+          <section id="streamPanel" class="stream-panel hidden" data-status="Stream page unavailable">
             <header class="scoreboard compact-scoreboard">
               <div>
                 <p class="eyebrow">Yankees Auto Mode</p>
@@ -58,7 +58,7 @@
             <webview id="streamView" partition="persist:closetcast-stream" allowpopups="false"></webview>
           </section>
 
-          <section id="ambientPanel" class="ambient-panel hidden">
+          <section id="ambientPanel" class="ambient-panel hidden" data-status="Ambient YouTube unavailable">
             <header class="ambient-header">
               <div>
                 <p class="eyebrow">Ambient YouTube</p>
@@ -94,11 +94,15 @@
         </section>
       </section>
 
-      <button id="settingsToggle" class="icon-button" title="Settings" aria-label="Settings">S</button>
+      <button id="settingsToggle" class="icon-button settings-button" title="Settings" aria-label="Settings">
+        <span aria-hidden="true"></span>
+      </button>
       <section id="settingsPanel" class="settings hidden" aria-label="Settings">
         <div class="settings-header">
           <h2>Settings</h2>
-          <button id="settingsClose" class="icon-button" title="Close" aria-label="Close">X</button>
+          <button id="settingsClose" class="icon-button close-button" title="Close" aria-label="Close">
+            <span aria-hidden="true"></span>
+          </button>
         </div>
         <div class="setting-row">
           <span>Layout</span>
@@ -108,6 +112,19 @@
             <button data-layout="grid4">4</button>
             <button data-layout="five">5</button>
           </div>
+        </div>
+        <div class="setting-row">
+          <span>Test mode</span>
+          <div class="segmented mode-segmented">
+            <button data-test-mode="normal">Normal</button>
+            <button data-test-mode="ambient">Ambient</button>
+            <button data-test-mode="yankees">Yankees</button>
+            <button data-test-mode="winddown">Wind-down</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <span>YouTube</span>
+          <button id="refreshAmbient">Next Pick</button>
         </div>
         <div class="setting-row">
           <span>Fullscreen</span>

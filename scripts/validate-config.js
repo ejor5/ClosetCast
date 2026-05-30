@@ -66,6 +66,19 @@ if (config.traffic) {
   requireType("traffic.incidentUrl", config.traffic.incidentUrl, "string");
   requireType("traffic.quickMapUrl", config.traffic.quickMapUrl, "string");
   if (!Array.isArray(config.traffic.keywords)) errors.push("traffic.keywords must be an array");
+  if (config.traffic.maxItemsPerRoute !== undefined && !Number.isFinite(Number(config.traffic.maxItemsPerRoute))) {
+    errors.push("traffic.maxItemsPerRoute must be numeric when present");
+  }
+  if (config.traffic.routes !== undefined) {
+    if (!Array.isArray(config.traffic.routes)) {
+      errors.push("traffic.routes must be an array when present");
+    } else {
+      for (const [index, route] of config.traffic.routes.entries()) {
+        requireType(`traffic.routes[${index}].label`, route.label, "string");
+        if (!Array.isArray(route.keywords)) errors.push(`traffic.routes[${index}].keywords must be an array`);
+      }
+    }
+  }
 }
 
 if (config.calendar) {
@@ -79,10 +92,36 @@ if (config.dayCycle) {
   for (const key of ["wakeTime", "windDownReminderTime", "sleepTime"]) {
     if (!/^\d{2}:\d{2}$/.test(config.dayCycle[key] || "")) errors.push(`dayCycle.${key} must be HH:mm`);
   }
+  if (config.dayCycle.extraSleepWindows !== undefined) {
+    if (!Array.isArray(config.dayCycle.extraSleepWindows)) {
+      errors.push("dayCycle.extraSleepWindows must be an array when present");
+    } else {
+      for (const [index, window] of config.dayCycle.extraSleepWindows.entries()) {
+        requireType(`dayCycle.extraSleepWindows[${index}].id`, window.id, "string");
+        requireType(`dayCycle.extraSleepWindows[${index}].label`, window.label, "string");
+        if (!Array.isArray(window.days) || window.days.length === 0) {
+          errors.push(`dayCycle.extraSleepWindows[${index}].days must be a non-empty array`);
+        }
+        for (const key of ["startTime", "endTime"]) {
+          if (!/^\d{2}:\d{2}$/.test(window[key] || "")) errors.push(`dayCycle.extraSleepWindows[${index}].${key} must be HH:mm`);
+        }
+      }
+    }
+  }
 }
 
 if (config.layout) {
   requireType("layout.cameraAspectRatio", config.layout.cameraAspectRatio, "string");
+}
+
+if (config.streamServer) {
+  requireType("streamServer.host", config.streamServer.host, "string");
+  if (!Number.isFinite(Number(config.streamServer.port))) errors.push("streamServer.port must be numeric");
+  for (const key of ["firstFrameTimeoutSeconds", "stallTimeoutSeconds"]) {
+    if (config.streamServer[key] !== undefined && !Number.isFinite(Number(config.streamServer[key]))) {
+      errors.push(`streamServer.${key} must be numeric when present`);
+    }
+  }
 }
 
 if (config.ambientYouTube) {

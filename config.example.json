@@ -16,7 +16,29 @@
     "triggerSleepFromApp": true,
     "installWakeTask": true,
     "installBackupSleepTask": false,
-    "sleepScriptPath": "scripts/sleep-now.ps1"
+    "sleepScriptPath": "scripts/sleep-now.ps1",
+    "extraSleepWindows": [
+      {
+        "id": "weekday-work",
+        "label": "Work shift",
+        "days": [
+          "tuesday",
+          "thursday",
+          "friday"
+        ],
+        "startTime": "16:00",
+        "endTime": "20:00"
+      },
+      {
+        "id": "saturday-work",
+        "label": "Saturday work",
+        "days": [
+          "saturday"
+        ],
+        "startTime": "09:30",
+        "endTime": "12:30"
+      }
+    ]
   },
   "layout": {
     "cameraAspectRatio": "7 / 8",
@@ -25,18 +47,19 @@
   },
   "ambientYouTube": {
     "enabled": true,
-    "startTime": "12:00",
-    "endTime": "22:00",
-    "rotationMinutes": 45,
+    "startTime": "00:00",
+    "endTime": "23:59",
+    "rotationMinutes": 30,
     "resolveRefreshHours": 12,
     "fallbackToSearchPage": true,
     "autoplay": true,
     "mute": true,
-    "recentHistorySize": 4,
+    "recentHistorySize": 10,
     "directVideos": [
       {
         "title": "Disneyland park B-roll",
         "url": "https://www.youtube.com/watch?v=9E-l9qYiqxQ&t=2725s",
+        "weight": 4,
         "enabled": true
       }
     ],
@@ -44,11 +67,90 @@
       {
         "title": "Mattercam live",
         "query": "Mattercam live",
+        "weight": 1,
         "enabled": true
       },
       {
         "title": "Disneyland B-roll",
         "query": "Disneyland b roll ambience",
+        "weight": 2,
+        "enabled": true
+      },
+      {
+        "title": "WDW Today resort TV",
+        "query": "WDW Today Disney resort hotel room TV loop",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Disney hotel room TV",
+        "query": "Disney hotel room TV experience WDW Today",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Walt Disney World live",
+        "query": "Walt Disney World live stream today",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Magic Kingdom live",
+        "query": "Magic Kingdom live stream ambience",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "EPCOT live",
+        "query": "EPCOT live stream ambience",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "ResortTV1 WDW live",
+        "query": "ResortTV1 Walt Disney World live stream",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Disney Springs ambience",
+        "query": "Disney Springs live stream ambience",
+        "weight": 7,
+        "enabled": true
+      },
+      {
+        "title": "Disney resort loop",
+        "query": "Walt Disney World resort TV music loop",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Monorail resort ambience",
+        "query": "Walt Disney World monorail resort ambience loop",
+        "weight": 7,
+        "enabled": true
+      },
+      {
+        "title": "Magical Escapes resort TV",
+        "query": "Magical Escapes Official Disney resort TV",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Magical Escapes hotel TV",
+        "query": "Magical Escapes Official Disney hotel room TV",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "Magical Escapes WDW",
+        "query": "Magical Escapes Official Walt Disney World ambience",
+        "weight": 7,
+        "enabled": true
+      },
+      {
+        "title": "Magical Escapes videos",
+        "query": "Magical Escapes Official videos Disney ambience",
         "enabled": true
       },
       {
@@ -69,6 +171,36 @@
       {
         "title": "Disney Channel Christmas commercials",
         "query": "Disney Channel Christmas commercials 2010s",
+        "enabled": true
+      },
+      {
+        "title": "Charlie Brown Christmas",
+        "query": "Charlie Brown Christmas clips",
+        "enabled": true
+      },
+      {
+        "title": "Great Pumpkin Charlie Brown",
+        "query": "It's the Great Pumpkin Charlie Brown clips",
+        "enabled": true
+      },
+      {
+        "title": "Vintage Halloween specials",
+        "query": "nostalgic Halloween specials clips commercials",
+        "enabled": true
+      },
+      {
+        "title": "Vintage Christmas specials",
+        "query": "nostalgic Christmas specials clips commercials",
+        "enabled": true
+      },
+      {
+        "title": "90s Halloween commercials",
+        "query": "90s Halloween commercials compilation",
+        "enabled": true
+      },
+      {
+        "title": "90s Christmas commercials",
+        "query": "90s Christmas commercials compilation",
         "enabled": true
       },
       {
@@ -93,7 +225,9 @@
   },
   "streamServer": {
     "host": "127.0.0.1",
-    "port": 4557
+    "port": 4557,
+    "firstFrameTimeoutSeconds": 15,
+    "stallTimeoutSeconds": 25
   },
   "cameras": [
     {
@@ -135,7 +269,7 @@
   "media": {
     "enabled": true,
     "folderPath": "media",
-    "rotationSeconds": 90,
+    "rotationSeconds": 20,
     "showDuringCameraMode": true,
     "allowedExtensions": [
       ".jpg",
@@ -183,7 +317,7 @@
   "traffic": {
     "enabled": true,
     "label": "San Jose traffic",
-    "routeLabel": "Hwy 85 / West Valley Fwy",
+    "routeLabel": "South Bay routes",
     "incidentUrl": "https://cad.chp.ca.gov/Traffic.aspx",
     "quickMapUrl": "https://quickmap.dot.ca.gov/?ll=37.25,-121.95&z=11",
     "keywords": [
@@ -194,6 +328,50 @@
       "West Valley Fwy",
       "West Valley Freeway"
     ],
+    "routes": [
+      {
+        "label": "Hwy 85",
+        "keywords": [
+          "SR-85",
+          "CA-85",
+          "Highway 85",
+          "West Valley",
+          "West Valley Fwy",
+          "West Valley Freeway"
+        ]
+      },
+      {
+        "label": "Hwy 17",
+        "keywords": [
+          "SR-17",
+          "CA-17",
+          "Highway 17",
+          "Santa Cruz Hwy",
+          "Santa Cruz Highway"
+        ]
+      },
+      {
+        "label": "I-280",
+        "keywords": [
+          "I-280",
+          "Interstate 280",
+          "Highway 280",
+          "Junipero Serra Fwy",
+          "Sinclair Fwy"
+        ]
+      },
+      {
+        "label": "Hwy 87",
+        "keywords": [
+          "SR-87",
+          "CA-87",
+          "Highway 87",
+          "Guadalupe Pkwy",
+          "Guadalupe Parkway"
+        ]
+      }
+    ],
+    "maxItemsPerRoute": 1,
     "maxItems": 3
   },
   "calendar": {
@@ -219,7 +397,7 @@
     ]
   },
   "yankees": {
-    "enabled": true,
+    "enabled": false,
     "teamId": 147,
     "scheduleUrl": "https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=147&hydrate=team,linescore&date={date}",
     "streamSiteUrl": "",
@@ -228,7 +406,10 @@
     "streamLinkRefreshMinutes": 20,
     "streamLinkPatterns": [
       "yankees",
-      "new-york-yankees"
+      "new-york-yankees",
+      "giants",
+      "san-francisco-giants",
+      "sf-giants"
     ],
     "gameStartBufferMinutes": 20,
     "gameEndBufferMinutes": 45,

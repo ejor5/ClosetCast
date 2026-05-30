@@ -2,12 +2,38 @@ const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "frid
 const DEFAULT_TRAFFIC_CONFIG = {
   enabled: true,
   label: "San Jose traffic",
-  routeLabel: "Hwy 85 / West Valley Fwy",
+  routeLabel: "South Bay routes",
   incidentUrl: "https://cad.chp.ca.gov/Traffic.aspx",
   quickMapUrl: "https://quickmap.dot.ca.gov/?ll=37.25,-121.95&z=11",
   keywords: ["SR-85", "CA-85", "Highway 85", "West Valley", "West Valley Fwy", "West Valley Freeway"],
+  routes: [
+    {
+      label: "Hwy 85",
+      keywords: ["SR-85", "CA-85", "Highway 85", "West Valley", "West Valley Fwy", "West Valley Freeway"]
+    },
+    {
+      label: "Hwy 17",
+      keywords: ["SR-17", "CA-17", "Highway 17", "Santa Cruz Hwy", "Santa Cruz Highway"]
+    },
+    {
+      label: "I-280",
+      keywords: ["I-280", "Interstate 280", "Highway 280", "Junipero Serra Fwy", "Sinclair Fwy"]
+    },
+    {
+      label: "Hwy 87",
+      keywords: ["SR-87", "CA-87", "Highway 87", "Guadalupe Pkwy", "Guadalupe Parkway"]
+    }
+  ],
+  maxItemsPerRoute: 1,
   maxItems: 3
 };
+
+const TRAFFIC_DIRECTIONS = [
+  { label: "NB", keywords: ["northbound", "north bound", "n/b", " nb ", " north "] },
+  { label: "SB", keywords: ["southbound", "south bound", "s/b", " sb ", " south "] },
+  { label: "EB", keywords: ["eastbound", "east bound", "e/b", " eb ", " east "] },
+  { label: "WB", keywords: ["westbound", "west bound", "w/b", " wb ", " west "] }
+];
 
 class WeatherService {
   constructor(config, logger, onUpdate) {
@@ -133,6 +159,7 @@ async function fetchWeather(location, config) {
     wind,
     sunrise: daily.sunrise?.[0] || "",
     sunset: daily.sunset?.[0] || "",
+    clothing: buildClothingAdvice({ high, currentTemp, feelsLike, rainChance, wind, label: location.label || "" }),
     summary: buildSummary(condition, high, low, rainChance)
   };
 }
@@ -165,6 +192,17 @@ function buildSummary(condition, high, low, rainChance) {
   return `${condition}, ${temps}, ${rainChance}% rain`;
 }
 
+function buildClothingAdvice({ high, currentTemp, feelsLike, rainChance, wind, label }) {
+  const heat = Math.max(...[high, currentTemp, feelsLike].filter(Number.isFinite));
+  const schoolPrefix = label ? `${label}: ` : "";
+  if (!Number.isFinite(heat)) return `${schoolPrefix}Wear breathable layers`;
+  if (heat >= 82) return `${schoolPrefix}Dress cool - heat risk`;
+  if (heat >= 74 && rainChance < 45) return `${schoolPrefix}Dress cool`;
+  if (heat >= 70 && wind < 14) return `${schoolPrefix}Light layers`;
+  if (rainChance >= 45) return `${schoolPrefix}Light rain layer`;
+  return `${schoolPrefix}Comfort layers`;
+}
+
 function weatherCodeToText(code) {
   if (code === 0) return "Clear";
   if ([1, 2].includes(code)) return "Mostly clear";
@@ -180,7 +218,8 @@ function weatherCodeToText(code) {
 async function fetchTraffic(config = {}, logger = console) {
   const trafficConfig = {
     ...DEFAULT_TRAFFIC_CONFIG,
-    ...config
+    ...config,
+    routes: Array.isArray(config.routes) ? config.routes : DEFAULT_TRAFFIC_CONFIG.routes
   };
 
   if (!trafficConfig.enabled) {
@@ -191,6 +230,7 @@ async function fetchTraffic(config = {}, logger = console) {
       headline: "Traffic disabled",
       detail: "",
       items: [],
+      routes: [],
       quickMapUrl: trafficConfig.quickMapUrl,
       updatedAt: null,
       error: null
@@ -210,15 +250,18 @@ async function fetchTraffic(config = {}, logger = console) {
   if (!response.ok) throw new Error(`Traffic source returned ${response.status}`);
 
   const html = await response.text();
-  const items = findTrafficMentions(html, trafficConfig.keywords || [], Number(trafficConfig.maxItems || 3));
-  logger.info("Traffic summary refreshed", { matches: items.length, route: trafficConfig.routeLabel });
+  const routes = buildTrafficRouteSummaries(html, trafficConfig);
+  const items = routes.flatMap((route) => route.items.map((item) => ({ ...item, routeLabel: route.label })));
+  const issueCount = items.length;
+  logger.info("Traffic summary refreshed", { matches: issueCount, route: trafficConfig.routeLabel });
   return {
     enabled: true,
     label: trafficConfig.label,
     routeLabel: trafficConfig.routeLabel,
-    headline: items.length ? `${items.length} possible issue${items.length === 1 ? "" : "s"}` : "Looks clear",
-    detail: items.length ? "CHP mentions found near your route keywords" : "No matching CHP incident text found",
+    headline: issueCount ? `${issueCount} possible issue${issueCount === 1 ? "" : "s"}` : "Looks clear",
+    detail: issueCount ? "CHP mentions found near your route keywords" : "No matching CHP incident text found",
     items,
+    routes,
     quickMapUrl: trafficConfig.quickMapUrl,
     updatedAt: new Date().toISOString(),
     error: null
@@ -233,10 +276,67 @@ function buildTrafficUnavailable(config = {}, error) {
     headline: "Traffic unavailable",
     detail: error?.message || "Traffic source unavailable",
     items: [],
+    routes: [],
     quickMapUrl: config.quickMapUrl || "https://quickmap.dot.ca.gov/?ll=37.25,-121.95&z=11",
     updatedAt: null,
     error: error?.message || "Traffic source unavailable"
   };
+}
+
+function buildTrafficRouteSummaries(html, config) {
+  const routes = normalizeTrafficRoutes(config);
+  const maxItems = Number(config.maxItemsPerRoute || config.maxItems || 3);
+  return routes.map((route) => {
+    const items = findTrafficMentions(html, route.keywords || [], maxItems)
+      .map((item) => ({
+        ...item,
+        direction: detectTrafficDirection(item.text, route.directions || TRAFFIC_DIRECTIONS, route.keywords || [])
+      }));
+    return {
+      label: route.label,
+      headline: items.length ? `${items.length} issue${items.length === 1 ? "" : "s"}` : "Clear",
+      items
+    };
+  });
+}
+
+function normalizeTrafficRoutes(config) {
+  const routes = Array.isArray(config.routes) && config.routes.length
+    ? config.routes
+    : [{ label: config.routeLabel || "Traffic", keywords: config.keywords || [] }];
+  return routes.map((route) => ({
+    label: route.label || "Traffic",
+    keywords: Array.isArray(route.keywords) && route.keywords.length ? route.keywords : config.keywords || [],
+    directions: Array.isArray(route.directions) && route.directions.length ? route.directions : TRAFFIC_DIRECTIONS
+  }));
+}
+
+function detectTrafficDirection(text, directions = TRAFFIC_DIRECTIONS, routeKeywords = []) {
+  const normalized = ` ${String(text || "").toLowerCase().replace(/[^a-z0-9/]+/g, " ")} `;
+  const normalizedRouteKeywords = routeKeywords.map(normalizeTrafficToken).filter(Boolean);
+  const routeIndex = normalizedRouteKeywords.reduce((closest, keyword) => {
+    const index = normalized.indexOf(` ${keyword} `);
+    if (index === -1) return closest;
+    return closest === -1 || index < closest ? index : closest;
+  }, -1);
+
+  const matches = directions.flatMap((direction) => {
+    return (direction.keywords || []).map(normalizeTrafficToken).filter(Boolean).map((keyword) => ({
+      label: direction.label,
+      index: normalized.indexOf(` ${keyword} `)
+    }));
+  }).filter((match) => match.index !== -1);
+
+  if (!matches.length) return "";
+  matches.sort((left, right) => {
+    if (routeIndex !== -1) return Math.abs(left.index - routeIndex) - Math.abs(right.index - routeIndex);
+    return left.index - right.index;
+  });
+  return matches[0].label || "";
+}
+
+function normalizeTrafficToken(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9/]+/g, " ").trim();
 }
 
 function findTrafficMentions(html, keywords, maxItems = 3) {
@@ -277,6 +377,9 @@ function htmlToText(html) {
 module.exports = {
   WeatherService,
   buildTrafficUnavailable,
+  buildTrafficRouteSummaries,
+  buildClothingAdvice,
+  detectTrafficDirection,
   fetchWeather,
   fetchTraffic,
   findTrafficMentions,

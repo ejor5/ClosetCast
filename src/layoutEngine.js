@@ -2,6 +2,7 @@
   function buildLayout(input) {
     const mode = input.appMode?.mode || "normal";
     const ambientActive = Boolean(input.ambient?.visible);
+    const gameStreamActive = Boolean(input.gameStreamActive);
     const mediaActive = Boolean(input.mediaActive);
     const requestedCameraLayout = input.cameraLayout || "five";
     const primaryCameraId = requestedCameraLayout === "focus"
@@ -41,15 +42,23 @@
           ? "camera-wall camera-grid4"
           : "camera-wall camera-mosaic";
 
+    const stageClass = gameStreamActive
+      ? "stage mode-normal has-game-stream"
+      : ambientActive
+        ? "stage mode-normal has-ambient"
+        : mediaActive
+          ? "stage mode-normal has-media"
+          : "stage mode-normal";
+
     return {
       mode: "normal",
-      stageClass: ambientActive ? "stage mode-normal has-ambient" : mediaActive ? "stage mode-normal has-media" : "stage mode-normal",
+      stageClass,
       cameraClass,
       cameras: selectCameras(cameras, requestedCameraLayout),
-      showStream: false,
+      showStream: gameStreamActive,
       showWinddown: false,
       showInfoRail: true,
-      showAmbient: ambientActive
+      showAmbient: !gameStreamActive && ambientActive
     };
   }
 

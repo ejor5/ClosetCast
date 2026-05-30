@@ -186,10 +186,10 @@ function computeAppMode() {
     };
   }
 
-  if (latestYankeesState?.mode === "yankees") {
+  if (latestYankeesState?.mode === "yankees" || latestYankeesState?.mode === "preparing") {
     return {
-      mode: "yankees",
-      reason: "favorite team game window",
+      mode: "normal",
+      reason: "favorite team stream window",
       message: latestYankeesState.message
     };
   }

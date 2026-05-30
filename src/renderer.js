@@ -105,6 +105,7 @@ function renderAll(forceCameras = false) {
     focusedCameraId: state.focusedCameraId,
     primaryCameraId: state.config.primaryCameraId,
     ambient: state.ambient,
+    gameStreamActive: isGameStreamActive(),
     mediaActive: isMediaActive(effectiveAppMode)
   });
 
@@ -217,11 +218,11 @@ function toggleCameraFocus(cameraId) {
 
 function renderChrome() {
   const appMode = getEffectiveAppMode();
-  const modeLabel = appMode.mode === "yankees"
-    ? "Favorites live"
-    : appMode.mode === "winddown"
+  const modeLabel = appMode.mode === "winddown"
       ? "Wind-down"
-      : "Dashboard";
+      : isGameStreamActive()
+        ? "Game stream"
+        : "Dashboard";
   elements.modeStatus.textContent = `${modeLabel} - ${appMode.message || ""}`.trim();
 
   if (state.dayCycle) {
@@ -306,7 +307,7 @@ function renderYankees() {
     elements.gameTime.textContent = "";
   }
 
-  const shouldPrepare = yankees.mode === "preparing" || yankees.mode === "yankees" || getEffectiveAppMode().mode === "yankees";
+  const shouldPrepare = isGameStreamActive();
   if (!shouldPrepare) return;
 
   if (!streams.length) {
@@ -377,7 +378,8 @@ function renderStreamViews(streams) {
         tile.classList.remove("stream-unavailable");
         scheduleStreamGameLinkClick(key, view, stream, 600);
         scheduleStreamGameLinkClick(key, view, stream, 2200);
-        [0, 1000, 3000, 8000, 14000].forEach((delay) => scheduleYankeesFullscreenClick(key, view, delay));
+        [3200, 6200, 10000].forEach((delay) => scheduleStreamPlayClick(key, view, delay));
+        [5000, 9000, 14000].forEach((delay) => scheduleYankeesFullscreenClick(key, view, delay));
       });
       tile.append(label, view);
     }
@@ -412,6 +414,14 @@ function scheduleYankeesFullscreenClick(key, view, delayMs = 0) {
   setTimeout(() => {
     if (token !== state.streamAutomationToken) return;
     clickYankeesFullscreenIfVisible(key, view).catch(() => {});
+  }, delayMs);
+}
+
+function scheduleStreamPlayClick(key, view, delayMs = 0) {
+  const token = state.streamAutomationToken;
+  setTimeout(() => {
+    if (token !== state.streamAutomationToken) return;
+    clickStreamPlayIfVisible(key, view).catch(() => {});
   }, delayMs);
 }
 
@@ -595,6 +605,11 @@ async function clickYankeesFullscreenIfVisible(key, view) {
   return result;
 }
 
+async function clickStreamPlayIfVisible(key, view) {
+  if (!view?.src || elements.streamPanel.classList.contains("hidden")) return null;
+  return view.executeJavaScript(`(${clickPlayInPage.toString()})()`, true);
+}
+
 function clickFullscreenInPage() {
   const positiveWords = /\b(fullscreen|full screen|full-screen|enter fullscreen|enter full screen|maximize|expand|theater|cinema|vjs fullscreen control|jw icon fullscreen|ytp fullscreen button|pip-fullscreen)\b/;
   const negativeWords = /\b(exit|restore|windowed|close|collapse|minimize|normal screen)\b/;
@@ -693,14 +708,95 @@ function clickFullscreenInPage() {
     }
   }
 
-  const target = document.querySelector("video, iframe, .video-js, .jwplayer, [class*='player' i], [id*='player' i]") || document.documentElement;
-  if (target?.requestFullscreen) {
-    return target.requestFullscreen()
-      .then(() => ({ clickedFullscreen: false, requestedFullscreen: true, target: target.tagName || "element" }))
-      .catch((error) => ({ clickedFullscreen: false, requestedFullscreen: false, error: error.message || String(error) }));
-  }
+  return { clickedFullscreen: false, error: "No visible fullscreen control found" };
+}
 
-  return { clickedFullscreen: false, requestedFullscreen: false, error: "No fullscreen control or requestFullscreen target found" };
+function clickPlayInPage() {
+  const positiveWords = /\b(play|watch|watch now|start|stream|live|resume|continue|tap to unmute)\b/;
+  const negativeWords = /\b(pause|replay|display|playlist|playback speed|autoplay|trailer|ad|advertisement|close|share)\b/;
+  const isVisible = (element) => {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    return rect.width > 0
+      && rect.height > 0
+      && centerX >= 0
+      && centerY >= 0
+      && centerX <= window.innerWidth
+      && centerY <= window.innerHeight
+      && style.visibility !== "hidden"
+      && style.display !== "none"
+      && Number(style.opacity || 1) > 0;
+  };
+  const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9-]+/g, " ").trim();
+  const describe = (element) => normalize([
+    element.textContent,
+    element.getAttribute("aria-label"),
+    element.getAttribute("title"),
+    element.getAttribute("class"),
+    element.getAttribute("id"),
+    element.getAttribute("name"),
+    element.getAttribute("data-title"),
+    element.getAttribute("data-tooltip"),
+    element.getAttribute("data-testid"),
+    element.querySelector?.("svg title")?.textContent,
+    element.querySelector?.("use")?.getAttribute("href"),
+    element.querySelector?.("use")?.getAttribute("xlink:href")
+  ].filter(Boolean).join(" "));
+  const collectCandidates = (root, depth = 0) => {
+    if (!root || depth > 3) return [];
+    const selectors = [
+      "button",
+      "[role='button']",
+      "[aria-label]",
+      "[title]",
+      "[class*='play' i]",
+      "[id*='play' i]",
+      "[class*='watch' i]",
+      "[id*='watch' i]",
+      ".vjs-big-play-button",
+      ".vjs-play-control",
+      ".jw-icon-playback",
+      ".ytp-large-play-button",
+      ".plyr__control"
+    ].join(", ");
+    const nodes = [];
+    try {
+      nodes.push(...root.querySelectorAll(selectors));
+      root.querySelectorAll("*").forEach((element) => {
+        if (element.shadowRoot) nodes.push(...collectCandidates(element.shadowRoot, depth + 1));
+      });
+      root.querySelectorAll("iframe").forEach((frame) => {
+        try {
+          const documentRoot = frame.contentDocument || frame.contentWindow?.document;
+          if (documentRoot) nodes.push(...collectCandidates(documentRoot, depth + 1));
+        } catch (_) {
+          // Cross-origin player frames cannot be inspected from the host page.
+        }
+      });
+    } catch (_) {
+      return nodes;
+    }
+    return nodes.filter((element, index, list) => list.indexOf(element) === index);
+  };
+  const candidates = collectCandidates(document);
+  for (const element of candidates) {
+    const button = element.closest("button, [role='button']") || element;
+    const label = describe(button);
+    if (label && isVisible(button) && positiveWords.test(label) && !negativeWords.test(label)) {
+      button.scrollIntoView?.({ block: "center", inline: "center" });
+      button.click();
+      return { clickedPlay: true, label };
+    }
+  }
+  const video = document.querySelector("video");
+  if (video && isVisible(video) && video.paused) {
+    return video.play()
+      .then(() => ({ clickedPlay: false, playedVideo: true }))
+      .catch((error) => ({ clickedPlay: false, playedVideo: false, error: error.message || String(error) }));
+  }
+  return { clickedPlay: false, reason: "No visible play control found" };
 }
 
 async function testStreamFullscreenNow() {
@@ -720,7 +816,7 @@ async function testStreamFullscreenNow() {
       const result = await clickYankeesFullscreenIfVisible(key, view);
       results.push(result);
     }
-    const successes = results.filter((result) => result?.clickedFullscreen || result?.alreadyFullscreen || result?.requestedFullscreen).length;
+    const successes = results.filter((result) => result?.clickedFullscreen || result?.alreadyFullscreen).length;
     elements.testStreamFullscreen.textContent = successes ? `OK ${successes}/${views.length}` : "No button";
   } catch (_) {
     elements.testStreamFullscreen.textContent = "Failed";
@@ -794,13 +890,14 @@ function isMediaActive(appMode) {
     state.config.media.showDuringCameraMode &&
     state.mediaFiles.length > 0 &&
     appMode.mode === "normal" &&
-    !state.ambient?.visible
+    !state.ambient?.visible &&
+    !isGameStreamActive()
   );
 }
 
 function renderAmbient() {
   const ambient = state.ambient;
-  const visible = Boolean(ambient?.visible && getEffectiveAppMode().mode === "normal");
+  const visible = Boolean(ambient?.visible && getEffectiveAppMode().mode === "normal" && !isGameStreamActive());
   elements.ambientPanel.classList.toggle("hidden", !visible);
   if (!ambient) return;
 
@@ -940,7 +1037,7 @@ function cycleDebugMode() {
 function setDebugMode(mode) {
   const normalized = mode === "ambient" ? "ambient" : mode === "yankees" ? "yankees" : mode === "winddown" ? "winddown" : "normal";
   state.localModeOverride = {
-    mode: normalized === "ambient" ? "normal" : normalized,
+    mode: normalized === "ambient" || normalized === "yankees" ? "normal" : normalized,
     debugName: normalized,
     reason: "UI test override",
     message: `UI test: ${normalized}`
@@ -1073,6 +1170,15 @@ function forceResolveYankeesStream() {
 
 function getEffectiveAppMode() {
   return state.localModeOverride || state.appMode;
+}
+
+function isGameStreamActive() {
+  return Boolean(
+    state.yankees &&
+    (state.yankees.mode === "preparing" ||
+      state.yankees.mode === "yankees" ||
+      state.localModeOverride?.debugName === "yankees")
+  );
 }
 
 function applyAmbientState(nextState) {

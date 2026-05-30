@@ -192,6 +192,14 @@ strong {
     "info ambient";
 }
 
+.mode-normal.has-game-stream {
+  grid-template-columns: minmax(330px, 24vw) minmax(0, 1fr);
+  grid-template-rows: minmax(112px, 16vh) minmax(0, 1fr);
+  grid-template-areas:
+    "info cameras"
+    "info ambient";
+}
+
 .mode-yankees {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 22rem);
   grid-template-rows: minmax(0, 1fr) minmax(210px, 0.28fr);
@@ -1037,6 +1045,11 @@ strong {
 
 .ambient-panel {
   grid-area: ambient;
+}
+
+.mode-normal.has-game-stream .stream-panel {
+  grid-area: ambient;
+  min-height: 0;
 }
 
 .mode-yankees .stream-panel {

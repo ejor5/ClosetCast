@@ -179,7 +179,7 @@ Use the settings button, `F1`, or number keys:
 Click any camera tile to focus it.
 Click that focused camera again to return to the previous layout.
 
-The default normal layout is not a plain grid. With local media available, ClosetCast gives media the large center stage and compresses cameras into a left-side monitor strip. Without media, it uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Favorite-team mode keeps the stream area dominant while preserving the five cameras and dashboard cards around it; if more than one favorite game is live, the stream area splits across those games. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
+The default normal layout is not a plain grid. With local media available, ClosetCast gives media the large center stage and compresses cameras into a left-side monitor strip. Without media, it uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Favorite-team streams stay inside the normal ambient media square, replacing YouTube ambiance while a game is live or preparing; if more than one favorite game is live, that square splits across those games. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
 
 ## Local Media
 
@@ -289,7 +289,7 @@ The app fetches the configured schedule source for today's favorite games. The d
 
 Before and during the live window, ClosetCast fetches the configured stream site base page and looks for the matching team link. The per-game link can change each day, so ClosetCast resolves it at runtime from your configured site.
 
-It matches anchor text and URLs using each team's `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL into the stream view. If multiple favorite games are live or preparing at once, ClosetCast splits that stream view into multiple webviews ordered by priority. After each page loads, the app blocks popups and only clicks a visible fullscreen control if one is present; it leaves the page alone when that button is not visible. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
+It matches anchor text and URLs using each team's `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL into the normal ambient media square. If multiple favorite games are live or preparing at once, ClosetCast splits that square into multiple webviews ordered by priority. After each page loads, the app blocks popups, clicks a matching game link if it landed on the site's home page, presses a visible play/watch control when present, and only clicks a visible player fullscreen control. It does not fullscreen the whole website when no player control is found. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
 
 Relevant config:
 

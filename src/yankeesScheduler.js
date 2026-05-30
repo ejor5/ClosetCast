@@ -311,33 +311,32 @@ async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
 
 function findYankeesStreamLink(html, baseUrl, searchText = "Yankees", patterns = []) {
   const configuredPatterns = Array.isArray(patterns) ? patterns : [];
-  const normalizedPatterns = [searchText, ...configuredPatterns]
-    .filter(Boolean)
-    .map((value) => normalizeText(value));
-  const candidates = [];
-  const anchorPattern = /<a\b[^>]*href\s*=\s*(["']?)([^"'\s>]+)\1[^>]*>([\s\S]*?)<\/a>/gi;
-  let match = anchorPattern.exec(html);
+  const normalizedPatterns = buildStreamPatterns(searchText, configuredPatterns);
+  const rawCandidates = extractStreamCandidates(html);
+  const scoredCandidates = [];
 
-  while (match) {
-    const rawHref = decodeHtml(match[2]);
-    const text = normalizeText(stripTags(decodeHtml(match[3])));
+  for (const candidate of rawCandidates) {
+    const rawHref = decodeHtml(candidate.href);
+    const text = normalizeText(decodeHtml(candidate.text || ""));
     const hrefText = normalizeText(rawHref);
     const score = scoreStreamCandidate(text, hrefText, normalizedPatterns);
     if (score > 0) {
       try {
-        candidates.push({
+        const href = new URL(rawHref, baseUrl);
+        if (!["http:", "https:"].includes(href.protocol)) continue;
+        scoredCandidates.push({
           href: new URL(rawHref, baseUrl).toString(),
-          score
+          score,
+          source: candidate.source
         });
       } catch (_) {
         // Ignore malformed links from the scraped page.
       }
     }
-    match = anchorPattern.exec(html);
   }
 
-  candidates.sort((a, b) => b.score - a.score);
-  return candidates[0] || null;
+  scoredCandidates.sort((a, b) => b.score - a.score);
+  return scoredCandidates[0] || null;
 }
 
 function scoreStreamCandidate(text, hrefText, patterns) {
@@ -349,8 +348,103 @@ function scoreStreamCandidate(text, hrefText, patterns) {
   }
   if (score <= 0) return 0;
   if (hrefText.includes("/mlb/")) score += 2;
-  if (hrefText.includes("vs")) score += 1;
+  if (hrefText.includes("-vs-") || text.includes("-vs-")) score += 3;
+  if (hrefText.includes("live") || text.includes("live")) score += 1;
+  if (/\b(highlights?|recap|preview|odds|tickets?|schedule|standings|news|stats)\b/.test(`${text} ${hrefText}`)) score -= 5;
+  if (score <= 0) return 0;
   return score;
+}
+
+function buildStreamPatterns(searchText, patterns = []) {
+  const values = [searchText, ...patterns].filter(Boolean);
+  const expanded = values.flatMap((value) => {
+    const normalized = normalizeText(value);
+    return [
+      normalized,
+      normalized.replace(/-/g, ""),
+      normalized.replace(/^new-york-/, "ny-"),
+      normalized.replace(/^los-angeles-/, "la-"),
+      normalized.replace(/^san-francisco-/, "sf-")
+    ];
+  });
+  return [...new Set(expanded.filter(Boolean))];
+}
+
+function extractStreamCandidates(html) {
+  const source = normalizeScrapeSource(html);
+  const candidates = [];
+  const seen = new Set();
+  const addCandidate = (href, text, candidateSource) => {
+    const cleanedHref = String(href || "").trim();
+    if (!cleanedHref || cleanedHref.startsWith("#") || /^(javascript|mailto|tel):/i.test(cleanedHref)) return;
+    const key = `${cleanedHref}|${text || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({ href: cleanedHref, text: text || cleanedHref, source: candidateSource });
+  };
+
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let anchorMatch = anchorPattern.exec(source);
+  while (anchorMatch) {
+    const attrs = parseHtmlAttributes(anchorMatch[1]);
+    const text = [
+      stripTags(anchorMatch[2]),
+      attrs.title,
+      attrs["aria-label"],
+      attrs["data-title"],
+      attrs["data-tooltip"]
+    ].filter(Boolean).join(" ");
+    for (const key of ["href", "data-href", "data-url", "data-link", "data-target", "data-src"]) {
+      if (attrs[key]) addCandidate(attrs[key], text, `anchor:${key}`);
+    }
+    if (attrs.onclick) {
+      for (const href of extractUrlsFromText(attrs.onclick)) addCandidate(href, text, "anchor:onclick");
+    }
+    anchorMatch = anchorPattern.exec(source);
+  }
+
+  const attrPattern = /\b(?:href|data-href|data-url|data-link|data-target|data-src)\s*=\s*(["'])(.*?)\1/gi;
+  let attrMatch = attrPattern.exec(source);
+  while (attrMatch) {
+    addCandidate(attrMatch[2], "", "attribute");
+    attrMatch = attrPattern.exec(source);
+  }
+
+  for (const href of extractUrlsFromText(source)) {
+    addCandidate(href, "", "body-url");
+  }
+
+  return candidates;
+}
+
+function parseHtmlAttributes(rawAttrs) {
+  const attrs = {};
+  const attrPattern = /([:@\w-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match = attrPattern.exec(rawAttrs || "");
+  while (match) {
+    attrs[match[1].toLowerCase()] = decodeHtml(match[2] || match[3] || match[4] || "");
+    match = attrPattern.exec(rawAttrs || "");
+  }
+  return attrs;
+}
+
+function extractUrlsFromText(value) {
+  const text = String(value || "");
+  const urls = [];
+  const urlPattern = /https?:\/\/[^\s"'<>\\]+|\/mlb\/[a-z0-9][a-z0-9/_-]*/gi;
+  let match = urlPattern.exec(text);
+  while (match) {
+    urls.push(match[0].replace(/[),.;]+$/g, ""));
+    match = urlPattern.exec(text);
+  }
+  return urls;
+}
+
+function normalizeScrapeSource(html) {
+  return decodeHtml(String(html || ""))
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\\//g, "/")
+    .replace(/&sol;/gi, "/");
 }
 
 function normalizeFavoriteTeams(config = {}) {

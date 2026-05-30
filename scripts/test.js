@@ -154,7 +154,9 @@ function testRendererCameraReconnects() {
   assert(stylesSource.includes("grid-template-areas:\n    \"stream cameras\"\n    \"stream info\""), "Yankees desktop layout should put the stream first and largest");
   assert(stylesSource.includes("grid-template-rows: minmax(58vh, 1fr) auto auto"), "Yankees narrow layout should keep the stream at the top");
   assert(indexSource.includes("id=\"streamViews\""), "stream panel should support multiple live game webviews");
+  assert(indexSource.includes("id=\"testStreamFullscreen\""), "settings should expose a manual stream fullscreen tester");
   assert(rendererSource.includes("stream-count-${Math.min(streams.length, 4)}"), "renderer should switch the stream grid when multiple games are live");
+  assert(rendererSource.includes("collectCandidates(document)") && rendererSource.includes("requestFullscreen"), "fullscreen tester should probe controls and fall back to requestFullscreen");
   assert(stylesSource.includes(".stream-count-2"), "styles should split two simultaneous favorite streams");
   assert(indexSource.includes("data-test-mode=\"ambient\""), "settings should expose a test mode picker");
   assert(indexSource.includes("id=\"refreshAmbient\""), "settings should expose a manual ambient YouTube picker");
@@ -194,6 +196,27 @@ function testYankeesStreamResolver() {
   assert(noGiantsFallback === null, "Yankees resolver should not pick another favorite team's page");
   const angelsMatch = findYankeesStreamLink(angelsHtml, "https://stream-site.example/", "Angels", ["los-angeles-angels"]);
   assert(angelsMatch.href === "https://stream-site.example/mlb/los-angeles-angels-vs-seattle-mariners-1/", "Angels resolver should return current Angels link");
+
+  const dataHrefHtml = [
+    "<html><body>",
+    "<button data-url=\"/mlb/new-york-yankees-vs-boston-red-sox-1/\" aria-label=\"New York Yankees vs Boston Red Sox live\">Watch</button>",
+    "</body></html>"
+  ].join("");
+  const dataHrefMatch = findYankeesStreamLink(dataHrefHtml, "https://stream-site.example/", "Yankees", ["new-york-yankees"]);
+  assert(dataHrefMatch.href === "https://stream-site.example/mlb/new-york-yankees-vs-boston-red-sox-1/", "stream resolver should read lazy data-url links");
+
+  const escapedHtml = "{\"url\":\"\\/mlb\\/san-francisco-giants-vs-los-angeles-dodgers-1\\/\"}";
+  const escapedMatch = findYankeesStreamLink(escapedHtml, "https://stream-site.example/", "Giants", ["san-francisco-giants", "sf-giants"]);
+  assert(escapedMatch.href === "https://stream-site.example/mlb/san-francisco-giants-vs-los-angeles-dodgers-1/", "stream resolver should read escaped JSON page links");
+
+  const junkHtml = [
+    "<html><body>",
+    "<a href=\"/mlb/new-york-yankees-highlights/\">Yankees highlights</a>",
+    "<a href=\"/mlb/new-york-yankees-vs-toronto-blue-jays-1/\">Yankees vs Blue Jays</a>",
+    "</body></html>"
+  ].join("");
+  const junkMatch = findYankeesStreamLink(junkHtml, "https://stream-site.example/", "Yankees", ["new-york-yankees"]);
+  assert(junkMatch.href.endsWith("/mlb/new-york-yankees-vs-toronto-blue-jays-1/"), "stream resolver should prefer live game links over highlight pages");
 }
 
 async function testYankeesTimingWindows() {

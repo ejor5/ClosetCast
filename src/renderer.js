@@ -62,6 +62,7 @@ const elements = {
   settingsClose: document.querySelector("#settingsClose"),
   settingsPanel: document.querySelector("#settingsPanel"),
   fullscreenToggle: document.querySelector("#fullscreenToggle"),
+  testStreamFullscreen: document.querySelector("#testStreamFullscreen"),
   refreshAmbient: document.querySelector("#refreshAmbient"),
   refreshSchedule: document.querySelector("#refreshSchedule"),
   openConfig: document.querySelector("#openConfig"),
@@ -373,7 +374,7 @@ function renderStreamViews(streams) {
       });
       view.addEventListener("did-finish-load", () => {
         tile.classList.remove("stream-unavailable");
-        [0, 1000, 3000, 8000].forEach((delay) => scheduleYankeesFullscreenClick(key, view, delay));
+        [0, 1000, 3000, 8000, 14000].forEach((delay) => scheduleYankeesFullscreenClick(key, view, delay));
       });
       tile.append(label, view);
     }
@@ -412,14 +413,18 @@ function scheduleYankeesFullscreenClick(key, view, delayMs = 0) {
 }
 
 async function clickYankeesFullscreenIfVisible(key, view) {
-  if (!view?.src || elements.streamPanel.classList.contains("hidden") || state.streamFullscreenClicked[key]) return;
+  if (!view?.src || elements.streamPanel.classList.contains("hidden") || state.streamFullscreenClicked[key]) return null;
   const result = await view.executeJavaScript(`(${clickFullscreenInPage.toString()})()`, true);
   if (result?.clickedFullscreen || result?.alreadyFullscreen) {
     state.streamFullscreenClicked[key] = true;
   }
+  return result;
 }
 
 function clickFullscreenInPage() {
+  const positiveWords = /\b(fullscreen|full screen|full-screen|enter fullscreen|enter full screen|maximize|expand|theater|cinema|vjs fullscreen control|jw icon fullscreen|ytp fullscreen button|pip-fullscreen)\b/;
+  const negativeWords = /\b(exit|restore|windowed|close|collapse|minimize|normal screen)\b/;
+
   const isVisible = (element) => {
     const rect = element.getBoundingClientRect();
     const style = window.getComputedStyle(element);
@@ -436,40 +441,121 @@ function clickFullscreenInPage() {
       && Number(style.opacity || 1) > 0;
   };
 
-  const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9-]+/g, " ").trim();
   const describe = (element) => normalize([
     element.textContent,
     element.getAttribute("aria-label"),
     element.getAttribute("title"),
     element.getAttribute("class"),
     element.getAttribute("id"),
+    element.getAttribute("name"),
+    element.getAttribute("alt"),
     element.getAttribute("data-title"),
     element.getAttribute("data-tooltip"),
-    element.getAttribute("data-testid")
+    element.getAttribute("data-testid"),
+    element.getAttribute("data-test-id"),
+    element.getAttribute("data-qa"),
+    element.getAttribute("data-control"),
+    element.getAttribute("data-button"),
+    element.getAttribute("aria-describedby"),
+    element.querySelector?.("svg title")?.textContent,
+    element.querySelector?.("use")?.getAttribute("href"),
+    element.querySelector?.("use")?.getAttribute("xlink:href")
   ].filter(Boolean).join(" "));
   const isFullscreenButton = (element) => {
     const label = describe(element);
-    if (!label || /\b(exit|restore|windowed)\b/.test(label)) return false;
-    return /\b(fullscreen|full screen|full screen button|enter fullscreen|enter full screen|vjs fullscreen control|jw icon fullscreen|ytp fullscreen button)\b/.test(label);
+    if (!label || negativeWords.test(label)) return false;
+    return positiveWords.test(label);
+  };
+  const collectCandidates = (root, depth = 0) => {
+    if (!root || depth > 3) return [];
+    const selectors = [
+      "button",
+      "[role='button']",
+      "[aria-label]",
+      "[title]",
+      "[class*='fullscreen' i]",
+      "[id*='fullscreen' i]",
+      "[class*='full-screen' i]",
+      "[id*='full-screen' i]",
+      "[class*='maximize' i]",
+      "[id*='maximize' i]",
+      ".vjs-fullscreen-control",
+      ".jw-icon-fullscreen",
+      ".ytp-fullscreen-button"
+    ].join(", ");
+    const nodes = [];
+    try {
+      nodes.push(...root.querySelectorAll(selectors));
+      root.querySelectorAll("*").forEach((element) => {
+        if (element.shadowRoot) nodes.push(...collectCandidates(element.shadowRoot, depth + 1));
+      });
+      root.querySelectorAll("iframe").forEach((frame) => {
+        try {
+          const documentRoot = frame.contentDocument || frame.contentWindow?.document;
+          if (documentRoot) nodes.push(...collectCandidates(documentRoot, depth + 1));
+        } catch (_) {
+          // Cross-origin player frames cannot be inspected from the host page.
+        }
+      });
+    } catch (_) {
+      return nodes;
+    }
+    return nodes.filter((element, index, list) => list.indexOf(element) === index);
   };
 
   if (document.fullscreenElement) {
     return { clickedFullscreen: false, alreadyFullscreen: true };
   }
 
-  const candidates = [
-    ...document.querySelectorAll("button, [role='button'], [aria-label], [title], .vjs-fullscreen-control, .jw-icon-fullscreen, .ytp-fullscreen-button")
-  ].filter((element, index, list) => list.indexOf(element) === index);
+  const candidates = collectCandidates(document);
 
   for (const element of candidates) {
     const button = element.closest("button, [role='button']") || element;
     if (isVisible(button) && isFullscreenButton(button)) {
+      button.scrollIntoView?.({ block: "center", inline: "center" });
       button.click();
-      return { clickedFullscreen: true };
+      return { clickedFullscreen: true, label: describe(button) };
     }
   }
 
-  return { clickedFullscreen: false };
+  const target = document.querySelector("video, iframe, .video-js, .jwplayer, [class*='player' i], [id*='player' i]") || document.documentElement;
+  if (target?.requestFullscreen) {
+    return target.requestFullscreen()
+      .then(() => ({ clickedFullscreen: false, requestedFullscreen: true, target: target.tagName || "element" }))
+      .catch((error) => ({ clickedFullscreen: false, requestedFullscreen: false, error: error.message || String(error) }));
+  }
+
+  return { clickedFullscreen: false, requestedFullscreen: false, error: "No fullscreen control or requestFullscreen target found" };
+}
+
+async function testStreamFullscreenNow() {
+  const originalLabel = elements.testStreamFullscreen.textContent;
+  const views = [...elements.streamViews.querySelectorAll("webview")].filter((view) => view.src);
+  elements.testStreamFullscreen.disabled = true;
+  elements.testStreamFullscreen.textContent = "Testing...";
+  try {
+    if (!views.length) {
+      elements.testStreamFullscreen.textContent = "No stream";
+      return;
+    }
+    const results = [];
+    for (const view of views) {
+      const key = view.dataset.streamKey || "stream";
+      state.streamFullscreenClicked[key] = false;
+      const result = await clickYankeesFullscreenIfVisible(key, view);
+      results.push(result);
+    }
+    const successes = results.filter((result) => result?.clickedFullscreen || result?.alreadyFullscreen || result?.requestedFullscreen).length;
+    elements.testStreamFullscreen.textContent = successes ? `OK ${successes}/${views.length}` : "No button";
+  } catch (_) {
+    elements.testStreamFullscreen.textContent = "Failed";
+  } finally {
+    setTimeout(() => {
+      elements.testStreamFullscreen.disabled = false;
+      elements.testStreamFullscreen.textContent = originalLabel;
+    }, 1800);
+  }
 }
 
 function renderMedia() {
@@ -790,6 +876,7 @@ function bindEvents() {
   elements.settingsToggle.addEventListener("click", () => elements.settingsPanel.classList.toggle("hidden"));
   elements.settingsClose.addEventListener("click", () => elements.settingsPanel.classList.add("hidden"));
   elements.fullscreenToggle.addEventListener("click", () => window.closetCast.setFullscreen(true));
+  elements.testStreamFullscreen.addEventListener("click", testStreamFullscreenNow);
   elements.refreshAmbient.addEventListener("click", refreshAmbientNow);
   elements.refreshSchedule.addEventListener("click", () => window.closetCast.refreshSchedule());
   elements.openConfig.addEventListener("click", () => window.closetCast.openConfigFolder());

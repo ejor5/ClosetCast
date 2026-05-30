@@ -57,9 +57,17 @@ function Get-NpmCommand {
   return $null
 }
 
+function Test-FfmpegCandidate {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+  if ($Path -match "Virtual Desktop Streamer") { return $false }
+  return $true
+}
+
 function Find-FfmpegPath {
   $command = Get-Command "ffmpeg" -ErrorAction SilentlyContinue
-  if ($command) { return $command.Source }
+  if ($command -and (Test-FfmpegCandidate $command.Source)) { return $command.Source }
 
   $roots = @(
     "$env:LOCALAPPDATA\Microsoft\WinGet\Packages",
@@ -69,7 +77,7 @@ function Find-FfmpegPath {
 
   foreach ($root in $roots) {
     $match = Get-ChildItem -LiteralPath $root -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue |
-      Where-Object { $_.FullName -match "ffmpeg" } |
+      Where-Object { $_.FullName -match "ffmpeg" -and (Test-FfmpegCandidate $_.FullName) } |
       Sort-Object LastWriteTime -Descending |
       Select-Object -First 1
     if ($match) { return $match.FullName }

@@ -1,6 +1,6 @@
 param(
   [ValidateSet("normal", "ambient", "yankees", "winddown")]
-  [string]$Mode = "normal",
+  [string]$Mode = "ambient",
   [switch]$UseExistingConfig,
   [switch]$PromptForLinks
 )
@@ -19,13 +19,21 @@ function Find-CommandPath {
   return $null
 }
 
+function Test-FfmpegCandidate {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+  if ($Path -match "Virtual Desktop Streamer") { return $false }
+  return $true
+}
+
 function Find-FfmpegPath {
   if (![string]::IsNullOrWhiteSpace($env:CLOSETCAST_FFMPEG_PATH) -and (Test-Path -LiteralPath $env:CLOSETCAST_FFMPEG_PATH)) {
     return (Resolve-Path -LiteralPath $env:CLOSETCAST_FFMPEG_PATH).Path
   }
 
   $commandPath = Find-CommandPath "ffmpeg"
-  if (![string]::IsNullOrWhiteSpace($commandPath)) {
+  if (Test-FfmpegCandidate $commandPath) {
     return $commandPath
   }
 
@@ -37,7 +45,7 @@ function Find-FfmpegPath {
 
   foreach ($root in $roots) {
     $match = Get-ChildItem -LiteralPath $root -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue |
-      Where-Object { $_.FullName -match "ffmpeg" } |
+      Where-Object { $_.FullName -match "ffmpeg" -and (Test-FfmpegCandidate $_.FullName) } |
       Sort-Object LastWriteTime -Descending |
       Select-Object -First 1
     if ($match) { return $match.FullName }
@@ -104,6 +112,17 @@ function Set-TestCamera {
   $url = Read-KeepOrReplace "Paste RTSP URL for $Label" $camera.url -TreatCurrentAsPlaceholder:$isPlaceholder
   $camera.url = $url
   $camera.enabled = -not [string]::IsNullOrWhiteSpace($url)
+}
+
+function Use-DemoCamerasForPlaceholders {
+  param([object]$Config)
+
+  foreach ($camera in $Config.cameras) {
+    if (Test-PlaceholderUrl $camera.url) {
+      $camera.url = "closetcast-demo://$($camera.id)"
+      $camera.enabled = $true
+    }
+  }
 }
 
 function Ensure-CalendarSlots {
@@ -188,6 +207,131 @@ function Set-TestLinks {
   }
 }
 
+function Get-TestAmbientSearchTopics {
+  return @(
+    [pscustomobject]@{ title = "Mattercam live"; query = "Mattercam live"; weight = 1; enabled = $true },
+    [pscustomobject]@{ title = "Disneyland B-roll"; query = "Disneyland b roll ambience"; weight = 2; enabled = $true },
+    [pscustomobject]@{ title = "WDW Today resort TV"; query = "WDW Today Disney resort hotel room TV loop"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Disney hotel room TV"; query = "Disney hotel room TV experience WDW Today"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Walt Disney World live"; query = "Walt Disney World live stream today"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Magic Kingdom live"; query = "Magic Kingdom live stream ambience"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "EPCOT live"; query = "EPCOT live stream ambience"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "ResortTV1 WDW live"; query = "ResortTV1 Walt Disney World live stream"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Disney Springs ambience"; query = "Disney Springs live stream ambience"; weight = 7; enabled = $true },
+    [pscustomobject]@{ title = "Disney resort loop"; query = "Walt Disney World resort TV music loop"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Monorail resort ambience"; query = "Walt Disney World monorail resort ambience loop"; weight = 7; enabled = $true },
+    [pscustomobject]@{ title = "Magical Escapes resort TV"; query = "Magical Escapes Official Disney resort TV"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Magical Escapes hotel TV"; query = "Magical Escapes Official Disney hotel room TV"; weight = 8; enabled = $true },
+    [pscustomobject]@{ title = "Magical Escapes WDW"; query = "Magical Escapes Official Walt Disney World ambience"; weight = 7; enabled = $true },
+    [pscustomobject]@{ title = "Magical Escapes videos"; query = "Magical Escapes Official videos Disney ambience"; enabled = $true },
+    [pscustomobject]@{ title = "2010s Disney Channel commercials"; query = "2010s Disney Channel commercials"; enabled = $true },
+    [pscustomobject]@{ title = "Disney XD commercials"; query = "2010s Disney XD commercials"; enabled = $true },
+    [pscustomobject]@{ title = "Disney Channel Halloween commercials"; query = "Disney Channel Halloween commercials 2010s"; enabled = $true },
+    [pscustomobject]@{ title = "Disney Channel Christmas commercials"; query = "Disney Channel Christmas commercials 2010s"; enabled = $true },
+    [pscustomobject]@{ title = "Charlie Brown Christmas"; query = "Charlie Brown Christmas clips"; enabled = $true },
+    [pscustomobject]@{ title = "Great Pumpkin Charlie Brown"; query = "It's the Great Pumpkin Charlie Brown clips"; enabled = $true },
+    [pscustomobject]@{ title = "Vintage Halloween specials"; query = "nostalgic Halloween specials clips commercials"; enabled = $true },
+    [pscustomobject]@{ title = "Vintage Christmas specials"; query = "nostalgic Christmas specials clips commercials"; enabled = $true },
+    [pscustomobject]@{ title = "90s Halloween commercials"; query = "90s Halloween commercials compilation"; enabled = $true },
+    [pscustomobject]@{ title = "90s Christmas commercials"; query = "90s Christmas commercials compilation"; enabled = $true },
+    [pscustomobject]@{ title = "Frutiger Aero ambience"; query = "Frutiger Aero ambience buildings"; enabled = $true },
+    [pscustomobject]@{ title = "Low poly night scenes"; query = "low poly night scene ambience"; enabled = $true }
+  )
+}
+
+function Merge-ConfigObject {
+  param(
+    [object]$Base,
+    [object]$Overlay
+  )
+
+  foreach ($property in $Overlay.PSObject.Properties) {
+    $name = $property.Name
+    $value = $property.Value
+    $baseProperty = $Base.PSObject.Properties[$name]
+    if ($null -ne $baseProperty -and $baseProperty.Value -is [pscustomobject] -and $value -is [pscustomobject]) {
+      Merge-ConfigObject $baseProperty.Value $value | Out-Null
+    } else {
+      if ($null -ne $baseProperty) {
+        $Base.$name = $value
+      } else {
+        $Base | Add-Member -NotePropertyName $name -NotePropertyValue $value
+      }
+    }
+  }
+
+  return $Base
+}
+
+function Get-PrivateConfigPath {
+  param([string]$ProjectPath)
+
+  if (![string]::IsNullOrWhiteSpace($env:CLOSETCAST_PRIVATE_CONFIG) -and (Test-Path -LiteralPath $env:CLOSETCAST_PRIVATE_CONFIG)) {
+    return (Resolve-Path -LiteralPath $env:CLOSETCAST_PRIVATE_CONFIG).Path
+  }
+
+  $defaultPrivate = Join-Path $ProjectPath "config.private.json"
+  if (Test-Path -LiteralPath $defaultPrivate) { return $defaultPrivate }
+  return ""
+}
+
+function Apply-PrivateLinks {
+  param([object]$Config)
+
+  $links = $Config.PSObject.Properties["privateLinks"].Value
+  if ($null -eq $links) { return }
+
+  $cameraLinks = $links.PSObject.Properties["cameras"].Value
+  if ($null -ne $cameraLinks) {
+    foreach ($camera in $Config.cameras) {
+      $cameraUrlProperty = $cameraLinks.PSObject.Properties[$camera.id]
+      if ($null -ne $cameraUrlProperty) {
+        $camera.url = [string]$cameraUrlProperty.Value
+        $camera.enabled = ![string]::IsNullOrWhiteSpace($camera.url)
+      }
+    }
+  }
+
+  $calendarLinks = $links.PSObject.Properties["calendarIcsUrls"].Value
+  if ($null -ne $calendarLinks) {
+    Ensure-CalendarSlots $Config
+    $calendarEnabled = $false
+    for ($i = 0; $i -lt 3; $i++) {
+      $url = if ($calendarLinks.Count -gt $i) { [string]$calendarLinks[$i] } else { "" }
+      $Config.calendar.icsUrls[$i].name = "Apple Calendar $($i + 1)"
+      $Config.calendar.icsUrls[$i].url = $url -replace "^webcal://", "https://"
+      if (![string]::IsNullOrWhiteSpace($url)) { $calendarEnabled = $true }
+    }
+    $Config.calendar.enabled = $calendarEnabled
+  }
+
+  $yankeesUrlProperty = $links.PSObject.Properties["yankeesStreamSiteUrl"]
+  if ($null -ne $yankeesUrlProperty) {
+    if ($null -eq $Config.yankees.PSObject.Properties["streamSiteUrl"]) {
+      $Config.yankees | Add-Member -NotePropertyName "streamSiteUrl" -NotePropertyValue ""
+    }
+    $Config.yankees.streamSiteUrl = [string]$yankeesUrlProperty.Value
+  }
+
+  $directVideos = $links.PSObject.Properties["ambientDirectVideos"].Value
+  if ($null -ne $directVideos) {
+    $existing = @($Config.ambientYouTube.directVideos)
+    $Config.ambientYouTube.directVideos = @($directVideos) + $existing
+  }
+
+  $searchTopics = $links.PSObject.Properties["ambientSearchTopics"].Value
+  if ($null -ne $searchTopics) {
+    $existing = @($Config.ambientYouTube.searchTopics)
+    $Config.ambientYouTube.searchTopics = @($searchTopics) + $existing
+  }
+
+  $mediaFolderProperty = $links.PSObject.Properties["mediaFolderPath"]
+  if ($null -ne $mediaFolderProperty) {
+    $Config.media.folderPath = [string]$mediaFolderProperty.Value
+    $Config.media.enabled = ![string]::IsNullOrWhiteSpace($Config.media.folderPath)
+  }
+}
+
 $projectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $runtimeDir = Join-Path $projectPath ".closetcast-test"
 $testConfigPath = Join-Path $runtimeDir "config.test.json"
@@ -203,9 +347,17 @@ $sourceConfigPath = if ($UseExistingConfig -and (Test-Path -LiteralPath (Join-Pa
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $userDataDir | Out-Null
 $config = Get-Content -LiteralPath $sourceConfigPath -Raw | ConvertFrom-Json
+$privateConfigPath = Get-PrivateConfigPath $projectPath
+if (![string]::IsNullOrWhiteSpace($privateConfigPath)) {
+  $privateConfig = Get-Content -LiteralPath $privateConfigPath -Raw | ConvertFrom-Json
+  $config = Merge-ConfigObject $config $privateConfig
+  Apply-PrivateLinks $config
+}
 
 if ($PromptForLinks) {
   Set-TestLinks $config
+} else {
+  Use-DemoCamerasForPlaceholders $config
 }
 
 $config.fullscreenOnLaunch = $false
@@ -219,21 +371,21 @@ $config.dayCycle.installBackupSleepTask = $false
 $config.ambientYouTube.enabled = $true
 $config.ambientYouTube.startTime = "00:00"
 $config.ambientYouTube.endTime = "23:59"
-$config.ambientYouTube.directVideos = @()
-$config.ambientYouTube.searchTopics = @(
-  [pscustomobject]@{
-    title = "Mattercam live"
-    query = "Mattercam live"
-    enabled = $true
-  }
-)
+$config.ambientYouTube.rotationMinutes = 30
+$config.ambientYouTube.recentHistorySize = 10
+if ($null -eq $config.ambientYouTube.PSObject.Properties["directVideos"]) {
+  $config.ambientYouTube | Add-Member -NotePropertyName "directVideos" -NotePropertyValue @()
+}
+if ($null -eq $config.ambientYouTube.searchTopics -or $config.ambientYouTube.searchTopics.Count -le 1) {
+  $config.ambientYouTube.searchTopics = Get-TestAmbientSearchTopics
+}
 if ($null -eq $config.PSObject.Properties["debug"]) {
   $config | Add-Member -NotePropertyName "debug" -NotePropertyValue ([pscustomobject]@{})
 }
 $config.debug = [pscustomobject]@{
   enabled = $true
   forceMode = $Mode
-  ambientTitle = "Mattercam live"
+  ambientTitle = "Disney Parks Live"
   ambientUrl = ""
   yankeesUrl = $config.yankees.streamSiteUrl
   resolveYankeesNow = $true
@@ -245,8 +397,11 @@ $encoding = New-Object System.Text.UTF8Encoding($false)
 Write-Host ""
 Write-Host "Starting ClosetCast UI test mode: $Mode"
 Write-Host "Fullscreen, autostart, wake tasks, and sleep trigger are disabled."
-Write-Host "Press F6 inside the app to cycle: normal -> Mattercam -> Yankees resolver -> wind-down."
+Write-Host "Press F6 inside the app to cycle: normal -> ambient YouTube -> Yankees resolver -> wind-down."
 Write-Host "Test config: $testConfigPath"
+if (![string]::IsNullOrWhiteSpace($privateConfigPath)) {
+  Write-Host "Private overlay: $privateConfigPath"
+}
 Write-Host "Test stream port: $($config.streamServer.port)"
 Write-Host ""
 
@@ -254,5 +409,5 @@ if (!(Test-CommandExists "npm.cmd")) {
   throw "npm.cmd was not found. Install Node.js with npm, then rerun this test."
 }
 
-$command = "`$env:CLOSETCAST_CONFIG = '$testConfigPath'; `$env:CLOSETCAST_USER_DATA_DIR = '$userDataDir'; Set-Location '$projectPath'; npm.cmd start"
+$command = "`$env:CLOSETCAST_CONFIG = '$testConfigPath'; `$env:CLOSETCAST_USER_DATA_DIR = '$userDataDir'; `$env:CLOSETCAST_DISABLE_PRIVATE_CONFIG = '1'; Set-Location '$projectPath'; npm.cmd start"
 Start-Process powershell.exe -ArgumentList "-NoProfile", "-NoExit", "-Command", $command -WorkingDirectory $projectPath

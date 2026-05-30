@@ -47,13 +47,21 @@ function Find-CommandPath {
   return $null
 }
 
+function Test-FfmpegCandidate {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+  if ($Path -match "Virtual Desktop Streamer") { return $false }
+  return $true
+}
+
 function Find-FfmpegPath {
   if (![string]::IsNullOrWhiteSpace($env:CLOSETCAST_FFMPEG_PATH) -and (Test-Path -LiteralPath $env:CLOSETCAST_FFMPEG_PATH)) {
     return (Resolve-Path -LiteralPath $env:CLOSETCAST_FFMPEG_PATH).Path
   }
 
   $commandPath = Find-CommandPath "ffmpeg"
-  if (![string]::IsNullOrWhiteSpace($commandPath)) {
+  if (Test-FfmpegCandidate $commandPath) {
     return $commandPath
   }
 
@@ -65,7 +73,7 @@ function Find-FfmpegPath {
 
   foreach ($root in $roots) {
     $match = Get-ChildItem -LiteralPath $root -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue |
-      Where-Object { $_.FullName -match "ffmpeg" } |
+      Where-Object { $_.FullName -match "ffmpeg" -and (Test-FfmpegCandidate $_.FullName) } |
       Sort-Object LastWriteTime -Descending |
       Select-Object -First 1
     if ($match) { return $match.FullName }
@@ -287,6 +295,9 @@ if ($currentConfig.dayCycle.installWakeTask) {
     ProjectPath = $projectPath
     WakeTime = $currentConfig.dayCycle.wakeTime
     SleepTime = $currentConfig.dayCycle.sleepTime
+  }
+  if ($currentConfig.dayCycle.extraSleepWindows) {
+    $dayCycleArgs.ExtraSleepWindowsJson = ($currentConfig.dayCycle.extraSleepWindows | ConvertTo-Json -Compress -Depth 10)
   }
   if ($currentConfig.dayCycle.installBackupSleepTask) {
     & (Join-Path $PSScriptRoot "install-day-cycle-tasks.ps1") @dayCycleArgs -InstallBackupSleep

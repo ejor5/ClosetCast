@@ -1,8 +1,9 @@
 # ClosetCast
 
-ClosetCast is a lightweight Windows kiosk app for an old laptop in a closet: five RTSP cameras, weather, Apple Calendar, Yankees mode, wind-down mode, and Windows wake/sleep automation.
+ClosetCast is a lightweight Windows kiosk app for an old laptop in a closet: ambient Disney/YouTube mode by default, five RTSP cameras, weather, Apple Calendar, wind-down mode, and Windows wake/sleep automation.
 
 The Yankees stream site URL is private/local config. Put your preferred site URL in `config.json`; the public repo keeps that value blank.
+For stable private links you do not want mixed into the full config, use a local `config.private.json` overlay. It is ignored by git.
 
 ## What It Does
 
@@ -12,13 +13,14 @@ The Yankees stream site URL is private/local config. Put your preferred site URL
 - Treats Ring like any other RTSP camera.
 - Rotates local images/videos from `media/`.
 - Shows weather for Almaden/Cambrian Park by default, and Los Altos on Monday/Wednesday school days.
-- Shows a compact San Jose / Highway 85 traffic summary in the weather card, with a configurable live map link.
+- Shows a compact San Jose traffic summary for Hwy 85, Hwy 17, I-280, and Hwy 87 in the weather card, with a configurable live map link.
 - Reads up to three Apple Calendar public `.ics` feed URLs.
 - Caches calendar data so temporary network failures do not blank the dashboard.
-- Rotates YouTube ambiance after noon using direct videos and first-result topic searches.
-- Fetches the Yankees schedule daily, converts game time through the laptop locale, prepares the stream page before first pitch, switches at game time, and returns after the configured game window.
+- Rotates YouTube ambiance all day by default using direct videos and first-result topic searches, weighted toward Disney World live streams and resort TV.
+- Yankees mode is still available as an opt-in config path, but it is disabled by default.
 - Shows a 10:00 PM wind-down reminder, tomorrow's calendar events until 10:30 PM, then puts the laptop to sleep.
-- Uses Windows Task Scheduler to wake at 9:00 AM and relaunch/focus ClosetCast.
+- Supports extra away/work sleep windows, with defaults for Tuesday/Thursday/Friday 4:00-8:00 PM and Saturday 9:30 AM-12:30 PM.
+- Uses Windows Task Scheduler to wake at 9:00 AM and relaunch/focus ClosetCast, plus wake after configured away windows.
 - Bridges RTSP to MJPEG with `ffmpeg` so Electron can display the camera feeds.
 - Logs to `logs/closetcast.log`.
 
@@ -28,6 +30,23 @@ The Yankees stream site URL is private/local config. Put your preferred site URL
 - Node.js 20 or newer.
 - `ffmpeg` available on PATH, or set `ffmpegPath` in `config.json`.
 - RTSP URLs for all cameras.
+
+## Quick Setup On Another Laptop
+
+Fastest path from a fresh Windows laptop:
+
+1. Open PowerShell.
+2. Paste this command:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/ejor5/ClosetCast/main/Install-ClosetCast.ps1 | iex"
+   ```
+
+3. Let the installer check Node.js and FFmpeg, install dependencies, and open the setup wizard.
+4. Paste the camera, calendar, Yankees, and power-schedule choices when prompted.
+5. Start later from the Desktop shortcut or `C:\Users\<you>\ClosetCast\Start-ClosetCast.cmd`.
+
+If you already copied or downloaded this repo on that laptop, double-click `Install-ClosetCast.cmd` to run the same installer, or double-click `Setup-ClosetCast.cmd` if dependencies are already installed and you only need to update local config.
 
 ## Setup
 
@@ -65,6 +84,14 @@ Manual path:
 
 3. Edit `config.json` and replace the example RTSP URLs with your real camera URLs. Do not commit this file.
 
+   For a smaller private links file, copy the private template instead:
+
+   ```powershell
+   Copy-Item config.private.example.json config.private.json
+   ```
+
+   Then put your RTSP URLs, Apple Calendar feeds, Yankees stream site URL, favorite Disney World live streams, resort TV links, or private media folder into `config.private.json`. ClosetCast merges it over the normal config at launch, and `config.private.json` is ignored by git.
+
 4. Validate the config:
 
    ```powershell
@@ -96,7 +123,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps
 That generates `.closetcast-test\config.test.json` from the example config and launches ClosetCast in a normal window. Press `F6` inside the app to cycle through:
 
 - normal dashboard
-- Mattercam YouTube ambiance
+- ambient YouTube
 - Yankees mode with an immediate configured-site Yankees-link resolver test
 - wind-down mode
 
@@ -107,6 +134,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ui-test.ps
 ```
 
 Add `-UseExistingConfig` if you want the test run to use your real camera/calendar URLs while still disabling sleep/autostart behavior.
+
+If `config.private.json` exists, UI test mode applies that private overlay first, then still disables fullscreen, autostart, wake tasks, and sleep commands for safety.
 
 Add `-PromptForLinks` if you want the PowerShell test script to ask for RTSP and calendar links:
 
@@ -125,6 +154,18 @@ Each camera needs an `id`, `name`, `url`, `enabled`, and `priority`. The default
 5. Ring Doorbell
 
 The RTSP bridge starts when the dashboard asks for each camera feed. If a stream exits, the app waits briefly and reconnects while keeping the tile visible.
+
+To test camera links without launching the full dashboard:
+
+```powershell
+npm.cmd run diagnose:rtsp
+```
+
+If you are using the safe UI test config, pass that file directly:
+
+```powershell
+npm.cmd run diagnose:rtsp -- .\.closetcast-test\config.test.json
+```
 
 ## Layouts
 
@@ -148,33 +189,41 @@ Place images or videos in `media/`. Supported defaults are:
 .jpg, .jpeg, .png, .gif, .webp, .mp4, .webm, .mov
 ```
 
-The folder is rescanned every five minutes while the app runs.
+The folder is rescanned every five minutes while the app runs. Media rotates quickly by default, and the dashboard caps the display time so the wall keeps changing.
 
-When local media is available in normal dashboard mode, ClosetCast prioritizes it visually over the cameras. Ambient YouTube and Yankees mode still take over when those modes are active.
+When local media is available in normal dashboard mode, ClosetCast prioritizes it visually over the cameras. Ambient YouTube is the default all-day presentation, while wind-down still takes over near sleep time.
 
 ## Weather
 
 `morningBriefing` controls the weather card. By default `showAllDay` is enabled, so the weather card stays available all day.
+Monday and Wednesday use the Los Altos weather location for school days. The weather card includes high/low, rain, wind, traffic, and a quick clothing nudge such as `Dress cool` when the day may run warm.
 
 - Normal days use `Almaden / Cambrian Park`.
 - Monday and Wednesday use `Los Altos` and show the `School day` label.
-- The weather card prioritizes high/low temperature, rain percentage, and wind speed.
+- The weather card stays compact and shows only the current temperature and rain chance.
 
 Weather is fetched from Open-Meteo with latitude/longitude from `config.json`. If the weather request fails, ClosetCast logs it and shows a clear unavailable state while the rest of the dashboard keeps running.
 
 ## Traffic
 
-The `traffic` section adds a lightweight San Jose route check to the weather card. By default it watches Highway 85 / West Valley Fwy keywords and links to a Caltrans QuickMap view centered around the West Valley/San Jose area.
+The `traffic` section adds a lightweight San Jose route check to the weather card. By default it watches Hwy 85, Hwy 17, I-280, and Hwy 87 keywords and links to a Caltrans QuickMap view centered around the West Valley/San Jose area. If the incident feed text includes directions such as northbound or southbound, ClosetCast labels matching items as NB or SB.
 
 Relevant config:
 
 ```json
 "traffic": {
   "enabled": true,
-  "routeLabel": "Hwy 85 / West Valley Fwy",
+  "routeLabel": "South Bay routes",
   "incidentUrl": "https://cad.chp.ca.gov/Traffic.aspx",
   "quickMapUrl": "https://quickmap.dot.ca.gov/?ll=37.25,-121.95&z=11",
-  "keywords": ["SR-85", "CA-85", "Highway 85", "West Valley", "West Valley Fwy"]
+  "keywords": ["SR-85", "CA-85", "Highway 85", "West Valley", "West Valley Fwy"],
+  "routes": [
+    { "label": "Hwy 85", "keywords": ["SR-85", "CA-85", "Highway 85", "West Valley"] },
+    { "label": "Hwy 17", "keywords": ["SR-17", "CA-17", "Highway 17", "Santa Cruz Hwy"] },
+    { "label": "I-280", "keywords": ["I-280", "Interstate 280", "Highway 280"] },
+    { "label": "Hwy 87", "keywords": ["SR-87", "CA-87", "Highway 87", "Guadalupe Pkwy"] }
+  ],
+  "maxItemsPerRoute": 1
 }
 ```
 
@@ -238,9 +287,9 @@ The app fetches the configured schedule source for today's Yankees game. If a ga
 - live window start: `gameStartBufferMinutes` before game time
 - live window end: `assumedGameDurationMinutes + gameEndBufferMinutes` after game time
 
-Before and during the live window, ClosetCast fetches the configured stream site base page and looks for a Yankees link. The per-game link can change each day, so ClosetCast resolves it at runtime from your configured site.
+Before and during the live window, ClosetCast fetches the configured stream site base page and looks for a Yankees link. During the current testing period it also accepts Giants links so the resolver can be checked on days without a Yankees game. The per-game link can change each day, so ClosetCast resolves it at runtime from your configured site.
 
-It matches anchor text and URLs using `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL as the dominant bottom-right view. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
+It matches anchor text and URLs using `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL as the dominant bottom-right view. After the page loads, the app blocks popups and only clicks a visible fullscreen control if one is present; it leaves the page alone when that button is not visible. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
 
 Relevant config:
 
@@ -250,7 +299,7 @@ Relevant config:
   "streamSearchText": "Yankees",
   "resolveStreamLink": true,
   "streamLinkRefreshMinutes": 20,
-  "streamLinkPatterns": ["yankees", "new-york-yankees"]
+  "streamLinkPatterns": ["yankees", "new-york-yankees", "giants", "san-francisco-giants", "sf-giants"]
 }
 ```
 
@@ -266,6 +315,11 @@ The default schedule is:
 - `22:30`: ClosetCast sends a Windows sleep command.
 - Next day `09:00`: the wake task resumes the cycle.
 
+The example config also sleeps during common work windows:
+
+- Tuesday, Thursday, and Friday: `16:00-20:00`.
+- Saturday: `09:30-12:30`.
+
 Config keys:
 
 ```json
@@ -276,11 +330,27 @@ Config keys:
   "sleepTime": "22:30",
   "triggerSleepFromApp": true,
   "installWakeTask": true,
-  "installBackupSleepTask": false
+  "installBackupSleepTask": false,
+  "extraSleepWindows": [
+    {
+      "id": "weekday-work",
+      "label": "Work shift",
+      "days": ["tuesday", "thursday", "friday"],
+      "startTime": "16:00",
+      "endTime": "20:00"
+    },
+    {
+      "id": "saturday-work",
+      "label": "Saturday work",
+      "days": ["saturday"],
+      "startTime": "09:30",
+      "endTime": "12:30"
+    }
+  ]
 }
 ```
 
-ClosetCast logs mode changes for normal dashboard, Yankees mode, wind-down mode, sleep triggered, suspend, and wake/resume detected.
+ClosetCast logs mode changes for normal dashboard, Yankees mode, wind-down mode, extra sleep windows, sleep triggered, suspend, and wake/resume detected.
 
 ## Windows Autostart
 
@@ -341,9 +411,9 @@ Rerun the one-command installer and allow FFmpeg installation if prompted. The i
 
 Older setup builds wrote `config.json` with a UTF-8 BOM. Rerun the installer and answer `n` when asked whether to replace `config.json`; setup will repair the encoding in place. The app also tolerates BOMs now.
 
-**Camera tile says reconnecting**
+**Camera tile says reconnecting or no signal**
 
-Check `ffmpegPath`, the RTSP URL, camera credentials, and whether the laptop can reach the camera IP. The app redacts passwords in logs.
+Check `ffmpegPath`, the RTSP URL, camera credentials, and whether the laptop can reach the camera IP. Run `npm.cmd run diagnose:rtsp` to test whether FFmpeg can receive a frame from each enabled camera. The app redacts passwords in logs.
 
 **No Yankees switch happens**
 

@@ -5,6 +5,7 @@ logs/*.log
 cache/
 .closetcast-test/
 config.json
+config.private.json
 .env
 *.local
 npm-debug.log*

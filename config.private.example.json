@@ -1,0 +1,46 @@
+{
+  "privateLinks": {
+    "cameras": {
+      "garage": "",
+      "front-yard": "",
+      "back-yard": "",
+      "side-yard": "",
+      "ring-doorbell": ""
+    },
+    "calendarIcsUrls": [
+      "",
+      "",
+      ""
+    ],
+    "yankeesStreamSiteUrl": "",
+    "ambientDirectVideos": [
+      {
+        "title": "Favorite Disney World live stream",
+        "url": "",
+        "weight": 8,
+        "enabled": false
+      },
+      {
+        "title": "Favorite resort TV loop",
+        "url": "",
+        "weight": 8,
+        "enabled": false
+      }
+    ],
+    "ambientSearchTopics": [
+      {
+        "title": "Disney World live priority",
+        "query": "Walt Disney World live stream ResortTV1",
+        "weight": 8,
+        "enabled": true
+      },
+      {
+        "title": "WDW resort TV priority",
+        "query": "WDW Today resort TV loop",
+        "weight": 8,
+        "enabled": true
+      }
+    ],
+    "mediaFolderPath": ""
+  }
+}

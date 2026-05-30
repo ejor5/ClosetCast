@@ -399,17 +399,51 @@
   "yankees": {
     "enabled": false,
     "teamId": 147,
-    "scheduleUrl": "https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=147&hydrate=team,linescore&date={date}",
+    "scheduleUrl": "https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId={teamId}&hydrate=team,linescore&date={date}",
     "streamSiteUrl": "",
     "streamSearchText": "Yankees",
     "resolveStreamLink": true,
     "streamLinkRefreshMinutes": 20,
     "streamLinkPatterns": [
       "yankees",
-      "new-york-yankees",
-      "giants",
-      "san-francisco-giants",
-      "sf-giants"
+      "new-york-yankees"
+    ],
+    "teams": [
+      {
+        "id": "yankees",
+        "label": "Yankees",
+        "teamId": 147,
+        "priority": 1,
+        "streamSearchText": "Yankees",
+        "streamLinkPatterns": [
+          "yankees",
+          "new-york-yankees"
+        ]
+      },
+      {
+        "id": "angels",
+        "label": "Angels",
+        "teamId": 108,
+        "priority": 2,
+        "streamSearchText": "Angels",
+        "streamLinkPatterns": [
+          "angels",
+          "los-angeles-angels",
+          "la-angels"
+        ]
+      },
+      {
+        "id": "giants",
+        "label": "Giants",
+        "teamId": 137,
+        "priority": 3,
+        "streamSearchText": "Giants",
+        "streamLinkPatterns": [
+          "giants",
+          "san-francisco-giants",
+          "sf-giants"
+        ]
+      }
     ],
     "gameStartBufferMinutes": 20,
     "gameEndBufferMinutes": 45,

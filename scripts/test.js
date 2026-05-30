@@ -5,7 +5,7 @@ const { CalendarService, eventsForWindow, normalizeCalendarUrl, parseIcs } = req
 const { applyPrivateLinks, mergeConfig } = require("../src/config");
 const { DayCycleService } = require("../src/dayCycleService");
 const { buildClothingAdvice, buildTrafficRouteSummaries, detectTrafficDirection, findTrafficMentions, selectLocation } = require("../src/weatherService");
-const { findYankeesStreamLink, YankeesScheduler } = require("../src/yankeesScheduler");
+const { findYankeesStreamLink, normalizeFavoriteTeams, YankeesScheduler } = require("../src/yankeesScheduler");
 const { FFMPEG_RTSP_TRANSPORT_WARNING, buildYouTubePlayerConfig, isUnsupportedRtspTransport, normalizeYouTubeEmbedUrl } = require("../src/streamServer");
 const { AmbientYouTubeService, chooseAmbientItem, findFirstYouTubeVideoId, isWithinAmbientWindow, toYouTubeEmbedUrl, youtubeSearchUrl } = require("../src/ambientYouTubeService");
 
@@ -153,13 +153,16 @@ function testRendererCameraReconnects() {
   assert(stylesSource.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"), "ambient camera strip should show all cameras across the top");
   assert(stylesSource.includes("grid-template-areas:\n    \"stream cameras\"\n    \"stream info\""), "Yankees desktop layout should put the stream first and largest");
   assert(stylesSource.includes("grid-template-rows: minmax(58vh, 1fr) auto auto"), "Yankees narrow layout should keep the stream at the top");
+  assert(indexSource.includes("id=\"streamViews\""), "stream panel should support multiple live game webviews");
+  assert(rendererSource.includes("stream-count-${Math.min(streams.length, 4)}"), "renderer should switch the stream grid when multiple games are live");
+  assert(stylesSource.includes(".stream-count-2"), "styles should split two simultaneous favorite streams");
   assert(indexSource.includes("data-test-mode=\"ambient\""), "settings should expose a test mode picker");
   assert(indexSource.includes("id=\"refreshAmbient\""), "settings should expose a manual ambient YouTube picker");
   assert(rendererSource.includes("document.querySelectorAll(\"[data-test-mode]\")"), "test mode picker should be wired in the renderer");
   assert(rendererSource.includes("function refreshAmbientNow") && rendererSource.includes("window.closetCast.refreshAmbient()"), "manual ambient picker should use the same refresh path as the timer");
   assert(rendererSource.includes("detectAmbientUnavailableInPage") && rendererSource.includes("refreshAmbientAfterUnavailable"), "ambient YouTube should skip unavailable videos");
   assert(!setDebugModeSource.includes("state.config.debug.enabled"), "settings test modes should work outside debug config");
-  assert(rendererSource.includes("clickYankeesFullscreenIfVisible"), "Yankees page automation should be limited to visible fullscreen controls");
+  assert(rendererSource.includes("clickYankeesFullscreenIfVisible"), "favorite stream automation should be limited to visible fullscreen controls");
   assert(!rendererSource.includes("MouseEvent"), "Yankees page automation should not synthesize mouse movement");
   assert(!rendererSource.includes("clickGameLink"), "Yankees page automation should not click stream-site game links");
 }
@@ -169,6 +172,8 @@ function testYankeesStreamResolver() {
   assert(schedulerSource.includes("streamResolveInFlight"), "Yankees resolver should prevent concurrent stream scraping");
   assert(schedulerSource.includes("lastStreamResolveAttemptAt"), "Yankees resolver should cool down after failed attempts");
   assert(!schedulerSource.includes("safeUrl(\"/mlb/\""), "Yankees resolver should not probe extra stream-site paths");
+  const teams = normalizeFavoriteTeams(require("../config.example.json").yankees);
+  assert(teams.map((team) => team.id).join(",") === "yankees,angels,giants", "favorite teams should default to Yankees, Angels, Giants priority order");
 
   const html = [
     "<html><body>",
@@ -179,14 +184,16 @@ function testYankeesStreamResolver() {
   const match = findYankeesStreamLink(html, "https://stream-site.example/", "Yankees", ["new-york-yankees"]);
   assert(match.href === "https://stream-site.example/mlb/new-york-yankees-vs-texas-rangers-1/", "Yankees resolver should return current game link");
 
-  const giantsHtml = [
+  const angelsHtml = [
     "<html><body>",
     "<a href=\"/mlb/arizona-diamondbacks-vs-colorado-rockies-1/\">Diamondbacks vs Rockies</a>",
-    "<a class=\"button\" href=\"/mlb/san-francisco-giants-vs-new-york-mets-1/\">San Francisco Giants vs New York Mets</a>",
+    "<a class=\"button\" href=\"/mlb/los-angeles-angels-vs-seattle-mariners-1/\">Los Angeles Angels vs Seattle Mariners</a>",
     "</body></html>"
   ].join("");
-  const giantsMatch = findYankeesStreamLink(giantsHtml, "https://stream-site.example/", "Yankees", ["new-york-yankees"]);
-  assert(giantsMatch.href === "https://stream-site.example/mlb/san-francisco-giants-vs-new-york-mets-1/", "temporary resolver should return a current Giants link");
+  const noGiantsFallback = findYankeesStreamLink(angelsHtml, "https://stream-site.example/", "Yankees", ["new-york-yankees"]);
+  assert(noGiantsFallback === null, "Yankees resolver should not pick another favorite team's page");
+  const angelsMatch = findYankeesStreamLink(angelsHtml, "https://stream-site.example/", "Angels", ["los-angeles-angels"]);
+  assert(angelsMatch.href === "https://stream-site.example/mlb/los-angeles-angels-vs-seattle-mariners-1/", "Angels resolver should return current Angels link");
 }
 
 async function testYankeesTimingWindows() {
@@ -203,12 +210,18 @@ async function testYankeesTimingWindows() {
   }, fakeLogger(), () => {});
 
   scheduler.publish({
-    game: {
+    games: [{
       startTime: "2026-05-04T23:05:00Z",
       status: "Scheduled",
       awayTeam: "Baltimore Orioles",
-      homeTeam: "New York Yankees"
-    }
+      homeTeam: "New York Yankees",
+      teamKey: "yankees",
+      teamId: 147,
+      teamLabel: "Yankees",
+      priority: 1,
+      streamSearchText: "Yankees",
+      streamLinkPatterns: ["yankees", "new-york-yankees"]
+    }]
   });
 
   await scheduler.evaluate(new Date("2026-05-04T22:40:00Z"));
@@ -221,6 +234,59 @@ async function testYankeesTimingWindows() {
 
   await scheduler.evaluate(new Date("2026-05-05T03:21:00Z"));
   assert(scheduler.state.mode === "dashboard", "Yankees mode should end after assumed duration plus buffer");
+}
+
+async function testFavoriteTeamSplitStreams() {
+  const scheduler = new YankeesScheduler({
+    yankees: {
+      enabled: true,
+      streamSiteUrl: "https://stream-site.example/",
+      resolveStreamLink: false,
+      gameStartBufferMinutes: 20,
+      gameEndBufferMinutes: 45,
+      assumedGameDurationMinutes: 210,
+      prepareBeforeGameMinutes: 10,
+      teams: [
+        { id: "yankees", label: "Yankees", teamId: 147, priority: 1, streamLinkPatterns: ["yankees"] },
+        { id: "angels", label: "Angels", teamId: 108, priority: 2, streamLinkPatterns: ["angels"] },
+        { id: "giants", label: "Giants", teamId: 137, priority: 3, streamLinkPatterns: ["giants"] }
+      ]
+    }
+  }, fakeLogger(), () => {});
+
+  scheduler.publish({
+    games: [
+      {
+        startTime: "2026-05-04T23:05:00Z",
+        status: "Scheduled",
+        awayTeam: "Baltimore Orioles",
+        homeTeam: "New York Yankees",
+        teamKey: "yankees",
+        teamId: 147,
+        teamLabel: "Yankees",
+        priority: 1,
+        streamSearchText: "Yankees",
+        streamLinkPatterns: ["yankees"]
+      },
+      {
+        startTime: "2026-05-04T23:07:00Z",
+        status: "Scheduled",
+        awayTeam: "Los Angeles Angels",
+        homeTeam: "Seattle Mariners",
+        teamKey: "angels",
+        teamId: 108,
+        teamLabel: "Angels",
+        priority: 2,
+        streamSearchText: "Angels",
+        streamLinkPatterns: ["angels"]
+      }
+    ]
+  });
+
+  await scheduler.evaluate(new Date("2026-05-04T22:55:00Z"));
+  assert(scheduler.state.mode === "yankees", "favorite-team mode should go live when any favorite game is live");
+  assert(scheduler.state.streams.length === 2, "simultaneous favorite games should publish multiple stream slots");
+  assert(scheduler.state.streams[0].teamLabel === "Yankees" && scheduler.state.streams[1].teamLabel === "Angels", "stream slots should stay in priority order");
 }
 
 function testAmbientYouTube() {
@@ -353,6 +419,7 @@ async function main() {
   testRendererCameraReconnects();
   testYankeesStreamResolver();
   await testYankeesTimingWindows();
+  await testFavoriteTeamSplitStreams();
   testAmbientYouTube();
   await testAmbientRefreshQueue();
   testRtspBridgeArgs();

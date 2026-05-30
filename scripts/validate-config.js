@@ -48,6 +48,20 @@ if (!config.yankees || typeof config.yankees !== "object") {
   requireType("yankees.scheduleUrl", config.yankees.scheduleUrl, "string");
   if (config.yankees.resolveStreamLink !== undefined) requireType("yankees.resolveStreamLink", config.yankees.resolveStreamLink, "boolean");
   if (config.yankees.streamLinkPatterns !== undefined && !Array.isArray(config.yankees.streamLinkPatterns)) errors.push("yankees.streamLinkPatterns must be an array when present");
+  if (config.yankees.teams !== undefined) {
+    if (!Array.isArray(config.yankees.teams)) {
+      errors.push("yankees.teams must be an array when present");
+    } else {
+      for (const [index, team] of config.yankees.teams.entries()) {
+        requireType(`yankees.teams[${index}].id`, team.id, "string");
+        requireType(`yankees.teams[${index}].label`, team.label, "string");
+        if (!Number.isFinite(Number(team.teamId))) errors.push(`yankees.teams[${index}].teamId must be numeric`);
+        if (team.priority !== undefined && !Number.isFinite(Number(team.priority))) errors.push(`yankees.teams[${index}].priority must be numeric when present`);
+        if (team.streamSearchText !== undefined) requireType(`yankees.teams[${index}].streamSearchText`, team.streamSearchText, "string");
+        if (team.streamLinkPatterns !== undefined && !Array.isArray(team.streamLinkPatterns)) errors.push(`yankees.teams[${index}].streamLinkPatterns must be an array when present`);
+      }
+    }
+  }
   for (const key of ["gameStartBufferMinutes", "gameEndBufferMinutes", "assumedGameDurationMinutes"]) {
     if (!Number.isFinite(Number(config.yankees[key]))) errors.push(`yankees.${key} must be numeric`);
   }

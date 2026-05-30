@@ -171,6 +171,7 @@ function getPublicConfig(config, streamBaseUrl, mediaFiles, logFile) {
       streamSiteUrl: yankeesStreamSiteUrl,
       streamSearchText: config.yankees.streamSearchText || "Yankees",
       streamLinkPatterns: config.yankees.streamLinkPatterns || [],
+      teams: Array.isArray(config.yankees.teams) ? config.yankees.teams : [],
       resolveStreamLink: config.yankees.resolveStreamLink !== false,
       prepareBeforeGameMinutes: Number(config.yankees.prepareBeforeGameMinutes || 10)
     },

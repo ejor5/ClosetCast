@@ -189,7 +189,7 @@ function computeAppMode() {
   if (latestYankeesState?.mode === "yankees") {
     return {
       mode: "yankees",
-      reason: "Yankees game window",
+      reason: "favorite team game window",
       message: latestYankeesState.message
     };
   }

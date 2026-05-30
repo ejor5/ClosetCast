@@ -17,7 +17,7 @@ For stable private links you do not want mixed into the full config, use a local
 - Reads up to three Apple Calendar public `.ics` feed URLs.
 - Caches calendar data so temporary network failures do not blank the dashboard.
 - Rotates YouTube ambiance all day by default using direct videos and first-result topic searches, weighted toward Disney World live streams and resort TV.
-- Yankees mode is still available as an opt-in config path, but it is disabled by default.
+- Favorite-team game mode is still available as an opt-in config path, but it is disabled by default. It checks Yankees, Angels, then Giants by default.
 - Shows a 10:00 PM wind-down reminder, tomorrow's calendar events until 10:30 PM, then puts the laptop to sleep.
 - Supports extra away/work sleep windows, with defaults for Tuesday/Thursday/Friday 4:00-8:00 PM and Saturday 9:30 AM-12:30 PM.
 - Uses Windows Task Scheduler to wake at 9:00 AM and relaunch/focus ClosetCast, plus wake after configured away windows.
@@ -124,7 +124,7 @@ That generates `.closetcast-test\config.test.json` from the example config and l
 
 - normal dashboard
 - ambient YouTube
-- Yankees mode with an immediate configured-site Yankees-link resolver test
+- favorite-team mode with an immediate configured-site Yankees-link resolver test
 - wind-down mode
 
 To start directly in one mode:
@@ -179,7 +179,7 @@ Use the settings button, `F1`, or number keys:
 Click any camera tile to focus it.
 Click that focused camera again to return to the previous layout.
 
-The default normal layout is not a plain grid. With local media available, ClosetCast gives media the large center stage and compresses cameras into a left-side monitor strip. Without media, it uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Yankees mode keeps the stream dominant in the bottom-right while preserving the five cameras and dashboard cards around it. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
+The default normal layout is not a plain grid. With local media available, ClosetCast gives media the large center stage and compresses cameras into a left-side monitor strip. Without media, it uses one large primary 7:8-ish camera tile, four smaller camera tiles around it, and a slim weather/calendar rail. Favorite-team mode keeps the stream area dominant while preserving the five cameras and dashboard cards around it; if more than one favorite game is live, the stream area splits across those games. Wind-down mode promotes tomorrow's calendar events and keeps cameras visible in a compact strip.
 
 ## Local Media
 
@@ -279,17 +279,17 @@ Relevant config:
 
 If YouTube search parsing fails, ClosetCast falls back to the YouTube search page for that topic and keeps the rest of the dashboard running.
 
-## Yankees Auto Mode
+## Favorite-Team Auto Mode
 
-The app fetches the configured schedule source for today's Yankees game. If a game exists, it computes:
+The app fetches the configured schedule source for today's favorite games. The default priority is Yankees, Angels, then Giants. If one or more games exist, it computes:
 
 - prepare time: `prepareBeforeGameMinutes` before game time
 - live window start: `gameStartBufferMinutes` before game time
 - live window end: `assumedGameDurationMinutes + gameEndBufferMinutes` after game time
 
-Before and during the live window, ClosetCast fetches the configured stream site base page and looks for a Yankees link. During the current testing period it also accepts Giants links so the resolver can be checked on days without a Yankees game. The per-game link can change each day, so ClosetCast resolves it at runtime from your configured site.
+Before and during the live window, ClosetCast fetches the configured stream site base page and looks for the matching team link. The per-game link can change each day, so ClosetCast resolves it at runtime from your configured site.
 
-It matches anchor text and URLs using `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL as the dominant bottom-right view. After the page loads, the app blocks popups and only clicks a visible fullscreen control if one is present; it leaves the page alone when that button is not visible. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
+It matches anchor text and URLs using each team's `streamSearchText` plus `streamLinkPatterns`, then loads the resolved per-game URL into the stream view. If multiple favorite games are live or preparing at once, ClosetCast splits that stream view into multiple webviews ordered by priority. After each page loads, the app blocks popups and only clicks a visible fullscreen control if one is present; it leaves the page alone when that button is not visible. The five cameras, weather, calendar, clock, power schedule, and camera health stay visible around it.
 
 Relevant config:
 
@@ -299,7 +299,12 @@ Relevant config:
   "streamSearchText": "Yankees",
   "resolveStreamLink": true,
   "streamLinkRefreshMinutes": 20,
-  "streamLinkPatterns": ["yankees", "new-york-yankees", "giants", "san-francisco-giants", "sf-giants"]
+  "streamLinkPatterns": ["yankees", "new-york-yankees"],
+  "teams": [
+    { "id": "yankees", "label": "Yankees", "teamId": 147, "priority": 1, "streamSearchText": "Yankees", "streamLinkPatterns": ["yankees", "new-york-yankees"] },
+    { "id": "angels", "label": "Angels", "teamId": 108, "priority": 2, "streamSearchText": "Angels", "streamLinkPatterns": ["angels", "los-angeles-angels", "la-angels"] },
+    { "id": "giants", "label": "Giants", "teamId": 137, "priority": 3, "streamSearchText": "Giants", "streamLinkPatterns": ["giants", "san-francisco-giants", "sf-giants"] }
+  ]
 }
 ```
 

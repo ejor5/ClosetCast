@@ -13,10 +13,10 @@ const state = {
   previousLayout: null,
   focusedCameraId: null,
   streamLoaded: false,
-  loadedStreamUrl: "",
+  loadedStreamUrls: {},
   loadedAmbientUrl: "",
   streamAutomationToken: 0,
-  streamFullscreenClicked: false,
+  streamFullscreenClicked: {},
   yankeesResolveInFlight: false,
   ambientLoadToken: 0,
   ambientUnavailableUrl: "",
@@ -54,7 +54,7 @@ const elements = {
   gameTitle: document.querySelector("#gameTitle"),
   gameStatus: document.querySelector("#gameStatus"),
   gameTime: document.querySelector("#gameTime"),
-  streamView: document.querySelector("#streamView"),
+  streamViews: document.querySelector("#streamViews"),
   ambientTitle: document.querySelector("#ambientTitle"),
   ambientStatus: document.querySelector("#ambientStatus"),
   ambientView: document.querySelector("#ambientView"),
@@ -216,7 +216,7 @@ function toggleCameraFocus(cameraId) {
 function renderChrome() {
   const appMode = getEffectiveAppMode();
   const modeLabel = appMode.mode === "yankees"
-    ? "Yankees live"
+    ? "Favorites live"
     : appMode.mode === "winddown"
       ? "Wind-down"
       : "Dashboard";
@@ -288,48 +288,134 @@ function renderYankees() {
   const yankees = state.yankees;
   if (!yankees) return;
 
-  const game = yankees.game;
-  if (game) {
+  const streams = getFavoriteStreams(yankees);
+  const game = streams[0]?.game || yankees.game;
+  if (streams.length > 1) {
+    elements.gameTitle.textContent = streams.map((stream) => stream.teamLabel).join(" / ");
+    elements.gameStatus.textContent = `${streams.length} live`;
+    elements.gameTime.textContent = streams.map((stream) => stream.localStartTimeLabel || "").filter(Boolean).join(" | ");
+  } else if (game) {
     elements.gameTitle.textContent = `${game.awayTeam} @ ${game.homeTeam}`;
     elements.gameStatus.textContent = game.status || yankees.mode;
     elements.gameTime.textContent = game.localStartTimeLabel || "";
   } else {
-    elements.gameTitle.textContent = "Yankees schedule";
+    elements.gameTitle.textContent = "Favorite teams";
     elements.gameStatus.textContent = yankees.scheduleError ? "Unavailable" : yankees.message;
     elements.gameTime.textContent = "";
   }
 
   const shouldPrepare = yankees.mode === "preparing" || yankees.mode === "yankees" || getEffectiveAppMode().mode === "yankees";
-  const targetStreamUrl = yankees.streamUrl || state.config.debug.yankeesUrl || state.config.yankees.streamSiteUrl;
-  if (shouldPrepare && !targetStreamUrl) {
-    elements.streamPanel.dataset.status = yankees.streamError || "Add Yankees stream URL in config";
-    elements.streamPanel.classList.add("stream-unavailable");
-    state.loadedStreamUrl = "";
-    elements.streamView.removeAttribute("src");
-  } else if (shouldPrepare && targetStreamUrl && state.loadedStreamUrl !== targetStreamUrl) {
-    elements.streamPanel.dataset.status = "Loading Yankees stream";
-    elements.streamPanel.classList.remove("stream-unavailable");
-    elements.streamView.src = targetStreamUrl;
-    state.streamLoaded = true;
-    state.loadedStreamUrl = targetStreamUrl;
-    state.streamFullscreenClicked = false;
-    state.streamAutomationToken += 1;
+  if (!shouldPrepare) return;
+
+  if (!streams.length) {
+    const fallbackUrl = yankees.streamUrl || state.config.debug.yankeesUrl || state.config.yankees.streamSiteUrl;
+    const fallbackStream = {
+      teamKey: "favorite-test",
+      teamLabel: "Favorite Team",
+      title: game ? `${game.awayTeam} @ ${game.homeTeam}` : "Stream test",
+      status: yankees.streamError || yankees.message || "Loading",
+      localStartTimeLabel: game?.localStartTimeLabel || "Now",
+      streamUrl: fallbackUrl,
+      streamError: yankees.streamError,
+      game
+    };
+    renderStreamViews(fallbackUrl ? [fallbackStream] : []);
+  } else {
+    renderStreamViews(streams);
   }
 }
 
-function scheduleYankeesFullscreenClick(delayMs = 0) {
+function getFavoriteStreams(yankees) {
+  return Array.isArray(yankees.streams)
+    ? yankees.streams.filter((stream) => stream && stream.streamUrl)
+    : [];
+}
+
+function renderStreamViews(streams) {
+  if (!streams.length) {
+    elements.streamPanel.dataset.status = state.yankees?.streamError || "Add stream site URL in config";
+    elements.streamPanel.classList.add("stream-unavailable");
+    elements.streamViews.innerHTML = "";
+    state.loadedStreamUrls = {};
+    return;
+  }
+
+  elements.streamPanel.dataset.status = streams.length > 1 ? "Loading favorite team streams" : `Loading ${streams[0].teamLabel || "favorite"} stream`;
+  elements.streamPanel.classList.remove("stream-unavailable");
+  elements.streamPanel.classList.toggle("has-multiple-streams", streams.length > 1);
+  elements.streamViews.className = `stream-views stream-count-${Math.min(streams.length, 4)}`;
+
+  const nextKeys = new Set(streams.map((stream, index) => stream.teamKey || `stream-${index}`));
+  for (const key of Object.keys(state.loadedStreamUrls)) {
+    if (!nextKeys.has(key)) delete state.loadedStreamUrls[key];
+  }
+  elements.streamViews.querySelectorAll(".stream-tile").forEach((tile) => {
+    if (!nextKeys.has(tile.dataset.team)) tile.remove();
+  });
+
+  streams.forEach((stream, index) => {
+    const key = stream.teamKey || `stream-${index}`;
+    let tile = elements.streamViews.querySelector(`.stream-tile[data-team="${cssEscape(key)}"]`);
+    let view = tile?.querySelector("webview");
+    if (!tile) {
+      tile = document.createElement("article");
+      tile.className = "stream-tile";
+      tile.dataset.team = key;
+      const label = document.createElement("div");
+      label.className = "stream-tile-label";
+      view = document.createElement("webview");
+      view.setAttribute("partition", `persist:closetcast-stream-${key}`);
+      view.setAttribute("allowpopups", "false");
+      view.dataset.streamKey = key;
+      view.addEventListener("did-fail-load", () => {
+        tile.dataset.status = `${stream.teamLabel || "Favorite"} stream failed to load`;
+        tile.classList.add("stream-unavailable");
+      });
+      view.addEventListener("did-finish-load", () => {
+        tile.classList.remove("stream-unavailable");
+        [0, 1000, 3000, 8000].forEach((delay) => scheduleYankeesFullscreenClick(key, view, delay));
+      });
+      tile.append(label, view);
+    }
+
+    tile.dataset.status = stream.streamError || "Stream page unavailable";
+    if (stream.streamError) tile.classList.add("stream-unavailable");
+    else tile.classList.remove("stream-unavailable");
+
+    const label = tile.querySelector(".stream-tile-label");
+    label.innerHTML = `
+      <span>${escapeHtml(stream.teamLabel || "Favorite")}</span>
+      <strong>${escapeHtml(stream.title || "Game stream")}</strong>
+    `;
+    elements.streamViews.append(tile);
+    if (state.loadedStreamUrls[key] !== stream.streamUrl) {
+      view.src = stream.streamUrl;
+      state.loadedStreamUrls[key] = stream.streamUrl;
+      state.streamFullscreenClicked[key] = false;
+      state.streamAutomationToken += 1;
+    }
+  });
+  state.streamLoaded = true;
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+function scheduleYankeesFullscreenClick(key, view, delayMs = 0) {
   const token = state.streamAutomationToken;
   setTimeout(() => {
     if (token !== state.streamAutomationToken) return;
-    clickYankeesFullscreenIfVisible().catch(() => {});
+    clickYankeesFullscreenIfVisible(key, view).catch(() => {});
   }, delayMs);
 }
 
-async function clickYankeesFullscreenIfVisible() {
-  if (!elements.streamView.src || elements.streamPanel.classList.contains("hidden") || state.streamFullscreenClicked) return;
-  const result = await elements.streamView.executeJavaScript(`(${clickFullscreenInPage.toString()})()`, true);
+async function clickYankeesFullscreenIfVisible(key, view) {
+  if (!view?.src || elements.streamPanel.classList.contains("hidden") || state.streamFullscreenClicked[key]) return;
+  const result = await view.executeJavaScript(`(${clickFullscreenInPage.toString()})()`, true);
   if (result?.clickedFullscreen || result?.alreadyFullscreen) {
-    state.streamFullscreenClicked = true;
+    state.streamFullscreenClicked[key] = true;
   }
 }
 
@@ -643,7 +729,7 @@ function forceResolveYankeesStream() {
       ...(state.yankees || {}),
       enabled: true,
       mode: "yankees",
-      message: "UI test: Yankees stream URL missing",
+      message: "UI test: favorite stream URL missing",
       streamUrl: "",
       streamError: "Add yankees.streamSiteUrl in config or paste it in Test-ClosetCast.cmd",
       game: state.yankees?.game || {
@@ -660,7 +746,7 @@ function forceResolveYankeesStream() {
     ...(state.yankees || {}),
     enabled: true,
     mode: "yankees",
-    message: "UI test: resolving current Yankees page",
+    message: "UI test: resolving current favorite team page",
     streamUrl: baseUrl,
     streamError: null,
     game: state.yankees?.game || {
@@ -682,7 +768,7 @@ function forceResolveYankeesStream() {
     state.yankees = {
       ...state.yankees,
       streamError: error.message,
-      message: "UI test: Yankees resolver failed; showing base page"
+      message: "UI test: favorite resolver failed; showing base page"
     };
     renderYankees();
   }).finally(() => {
@@ -734,14 +820,6 @@ function bindEvents() {
     });
   });
 
-  elements.streamView.addEventListener("did-fail-load", () => {
-    elements.streamPanel.dataset.status = "Yankees stream failed to load";
-    elements.streamPanel.classList.add("stream-unavailable");
-  });
-  elements.streamView.addEventListener("did-finish-load", () => {
-    elements.streamPanel.classList.remove("stream-unavailable");
-    [0, 1000, 3000, 8000].forEach(scheduleYankeesFullscreenClick);
-  });
   elements.ambientView.addEventListener("did-fail-load", (event) => {
     if (event.errorCode === -3) return;
     elements.ambientPanel.dataset.status = "Ambient YouTube failed to load";

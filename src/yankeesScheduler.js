@@ -1,24 +1,49 @@
 const { getYankeesStreamSiteUrl } = require("./config");
 const { redactUrl } = require("./logger");
 
-const DEFAULT_STREAM_LINK_PATTERNS = ["yankees", "new-york-yankees"];
-const TEMPORARY_STREAM_LINK_PATTERNS = ["giants", "san-francisco-giants", "sf-giants"];
+const DEFAULT_FAVORITE_TEAMS = [
+  {
+    id: "yankees",
+    label: "Yankees",
+    teamId: 147,
+    streamSearchText: "Yankees",
+    streamLinkPatterns: ["yankees", "new-york-yankees"]
+  },
+  {
+    id: "angels",
+    label: "Angels",
+    teamId: 108,
+    streamSearchText: "Angels",
+    streamLinkPatterns: ["angels", "los-angeles-angels", "la-angels"]
+  },
+  {
+    id: "giants",
+    label: "Giants",
+    teamId: 137,
+    streamSearchText: "Giants",
+    streamLinkPatterns: ["giants", "san-francisco-giants", "sf-giants"]
+  }
+];
 
 class YankeesScheduler {
   constructor(config, logger, onUpdate) {
     this.config = config.yankees || {};
+    this.teams = normalizeFavoriteTeams(this.config);
     this.streamSiteUrl = getYankeesStreamSiteUrl(this.config);
     this.logger = logger;
     this.onUpdate = onUpdate;
     this.timer = null;
     this.lastFetchAt = 0;
-    this.streamResolveInFlight = false;
-    this.lastStreamResolveAttemptAt = 0;
+    this.streamResolveInFlight = new Set();
+    this.lastStreamResolveAttemptAt = new Map();
     this.state = {
       enabled: Boolean(this.config.enabled),
       mode: "dashboard",
-      message: "Yankees mode idle",
+      message: "Favorite teams idle",
       game: null,
+      games: [],
+      activeGames: [],
+      streams: [],
       scheduleError: null,
       streamUrl: this.streamSiteUrl,
       streamResolvedAt: null,
@@ -28,7 +53,7 @@ class YankeesScheduler {
 
   start() {
     if (!this.config.enabled) {
-      this.publish({ message: "Yankees mode disabled" });
+      this.publish({ message: "Favorite teams disabled" });
       return;
     }
 
@@ -50,7 +75,7 @@ class YankeesScheduler {
     const now = new Date();
     const refreshMs = Number(this.config.refreshScheduleMinutes || 360) * 60_000;
 
-    if (!this.state.game || Date.now() - this.lastFetchAt > refreshMs || !isSameLocalDate(now, new Date(this.lastFetchAt))) {
+    if (!this.state.games?.length || Date.now() - this.lastFetchAt > refreshMs || !isSameLocalDate(now, new Date(this.lastFetchAt))) {
       await this.fetchTodaySchedule(now);
     }
 
@@ -60,103 +85,138 @@ class YankeesScheduler {
   async fetchTodaySchedule(date) {
     this.lastFetchAt = Date.now();
     const dateText = formatLocalDate(date);
-    const url = (this.config.scheduleUrl || "").replace("{date}", dateText);
+    const games = [];
+    const errors = [];
 
-    if (!url) {
-      this.publish({ game: null, scheduleError: "No schedule URL configured" });
-      return;
+    for (const team of this.teams) {
+      const url = buildScheduleUrl(this.config, team, dateText);
+      if (!url) {
+        errors.push(`${team.label}: no schedule URL configured`);
+        continue;
+      }
+
+      try {
+        this.logger.info("Fetching favorite team schedule", { team: team.label, date: dateText });
+        const response = await fetch(url, { headers: { "Accept": "application/json,text/html;q=0.9,*/*;q=0.8" } });
+        if (!response.ok) throw new Error(`Schedule source returned ${response.status}`);
+        const body = await response.text();
+        const game = parseSchedule(body, dateText, team);
+        if (game) games.push(game);
+      } catch (error) {
+        errors.push(`${team.label}: ${error.message}`);
+        this.logger.warn("Favorite team schedule fetch failed", { team: team.label, error: error.message });
+      }
     }
 
-    try {
-      this.logger.info("Fetching Yankees schedule", { date: dateText });
-      const response = await fetch(url, { headers: { "Accept": "application/json,text/html;q=0.9,*/*;q=0.8" } });
-      if (!response.ok) throw new Error(`Schedule source returned ${response.status}`);
-      const body = await response.text();
-      const game = parseSchedule(body, dateText);
-      this.publish({
-        game,
-        scheduleError: null,
-        message: game ? "Yankees game found" : "No Yankees game today"
-      });
-    } catch (error) {
-      this.logger.warn("Yankees schedule fetch failed", { error: error.message });
-      this.publish({
-        game: null,
-        scheduleError: error.message,
-        mode: "dashboard",
-        message: "Schedule unavailable; staying on dashboard"
-      });
-    }
+    games.sort((a, b) => a.priority - b.priority || new Date(a.startTime) - new Date(b.startTime));
+    this.publish({
+      game: games[0] || null,
+      games,
+      scheduleError: errors.length ? errors.join("; ") : null,
+      mode: games.length ? this.state.mode : "dashboard",
+      message: games.length ? `${games.length} favorite game${games.length === 1 ? "" : "s"} found` : "No favorite games today"
+    });
   }
 
   async evaluate(now) {
-    const game = this.state.game;
+    const games = Array.isArray(this.state.games) ? this.state.games : [];
 
-    if (!game) {
-      this.publish({ mode: "dashboard", message: this.state.scheduleError ? "Schedule unavailable; staying on dashboard" : "No Yankees game today" });
-      return;
-    }
-
-    const startBufferMs = Number(this.config.gameStartBufferMinutes || 0) * 60_000;
-    const endBufferMs = Number(this.config.gameEndBufferMinutes || 45) * 60_000;
-    const prepareMs = Number(this.config.prepareBeforeGameMinutes || 10) * 60_000;
-    const assumedDurationMs = Number(this.config.assumedGameDurationMinutes || 210) * 60_000;
-    const gameStart = new Date(game.startTime);
-    const windowStart = new Date(gameStart.getTime() - startBufferMs);
-    const prepareStart = new Date(windowStart.getTime() - prepareMs);
-    const windowEnd = new Date(gameStart.getTime() + assumedDurationMs + endBufferMs);
-
-    let mode = "dashboard";
-    let message = `Next Yankees game: ${formatTime(gameStart)}`;
-
-    if (now >= windowStart && now <= windowEnd && !isFinalStatus(game.status)) {
-      mode = "yankees";
-      message = "Yankees mode live";
-    } else if (now >= prepareStart && now < windowStart) {
-      mode = "preparing";
-      message = "Preparing Yankees stream page";
-    } else if (now > windowEnd || isFinalStatus(game.status)) {
-      mode = "dashboard";
-      message = "Yankees game window ended";
-    }
-
-    const patch = {
-      mode,
-      message,
-      game: {
-        ...game,
-        localStartTimeLabel: formatTime(gameStart),
-        prepareStart: prepareStart.toISOString(),
-        windowStart: windowStart.toISOString(),
-        windowEnd: windowEnd.toISOString()
-      }
-    };
-
-    this.publish(patch);
-
-    if (mode === "preparing" || mode === "yankees") {
-      await this.resolveStreamLinkIfNeeded();
-    }
-  }
-
-  async resolveStreamLinkIfNeeded() {
-    if (this.config.resolveStreamLink === false) return;
-    const refreshMs = Number(this.config.streamLinkRefreshMinutes || 20) * 60_000;
-    const resolvedAt = this.state.streamResolvedAt ? new Date(this.state.streamResolvedAt).getTime() : 0;
-    const currentUrl = this.state.streamUrl || "";
-    const baseUrl = this.streamSiteUrl;
-
-    if (!baseUrl) {
+    if (!games.length) {
       this.publish({
-        streamUrl: "",
-        streamResolvedAt: null,
-        streamError: "No Yankees stream site URL configured",
-        message: this.state.mode === "yankees" ? "Yankees stream URL missing" : this.state.message
+        mode: "dashboard",
+        activeGames: [],
+        streams: [],
+        message: this.state.scheduleError ? "Schedule unavailable; staying on dashboard" : "No favorite games today"
       });
       return;
     }
 
-    if (this.streamResolveInFlight || Date.now() - this.lastStreamResolveAttemptAt < refreshMs) {
+    const evaluatedGames = games.map((game) => withGameWindow(game, this.config, now));
+    const activeGames = evaluatedGames.filter((game) => game.playState === "live");
+    const preparingGames = evaluatedGames.filter((game) => game.playState === "preparing");
+    const nextGame = evaluatedGames.find((game) => game.playState === "upcoming") || evaluatedGames[0];
+
+    let mode = "dashboard";
+    let message = nextGame ? `Next ${nextGame.teamLabel} game: ${nextGame.localStartTimeLabel}` : "No favorite games today";
+
+    if (activeGames.length) {
+      mode = "yankees";
+      message = activeGames.length === 1
+        ? `${activeGames[0].teamLabel} mode live`
+        : `${activeGames.length} favorite games live`;
+    } else if (preparingGames.length) {
+      mode = "preparing";
+      message = preparingGames.length === 1
+        ? `Preparing ${preparingGames[0].teamLabel} stream page`
+        : `Preparing ${preparingGames.length} stream pages`;
+    } else if (evaluatedGames.every((game) => game.playState === "ended")) {
+      mode = "dashboard";
+      message = "Favorite game windows ended";
+    }
+
+    const visibleGames = [...activeGames, ...preparingGames];
+    const streams = this.buildStreams(visibleGames);
+    const primaryStream = streams[0] || null;
+    const primaryGame = activeGames[0] || preparingGames[0] || nextGame || null;
+
+    this.publish({
+      mode,
+      message,
+      game: primaryGame,
+      games: evaluatedGames,
+      activeGames,
+      streams,
+      streamUrl: primaryStream?.streamUrl || this.streamSiteUrl,
+      streamResolvedAt: primaryStream?.streamResolvedAt || null,
+      streamError: primaryStream?.streamError || null
+    });
+
+    if (visibleGames.length) {
+      await this.resolveStreamLinksIfNeeded(visibleGames);
+    }
+  }
+
+  buildStreams(games) {
+    return games.map((game) => {
+      const existing = (this.state.streams || []).find((stream) => stream.teamId === game.teamId);
+      return {
+        teamId: game.teamId,
+        teamKey: game.teamKey,
+        teamLabel: game.teamLabel,
+        title: `${game.awayTeam} @ ${game.homeTeam}`,
+        status: game.status || game.playState,
+        localStartTimeLabel: game.localStartTimeLabel,
+        streamUrl: existing?.streamUrl || this.streamSiteUrl,
+        streamResolvedAt: existing?.streamResolvedAt || null,
+        streamError: existing?.streamError || null,
+        game
+      };
+    });
+  }
+
+  async resolveStreamLinksIfNeeded(games) {
+    if (this.config.resolveStreamLink === false) return;
+    await Promise.all(games.map((game) => this.resolveTeamStreamLinkIfNeeded(game)));
+  }
+
+  async resolveTeamStreamLinkIfNeeded(game) {
+    const refreshMs = Number(this.config.streamLinkRefreshMinutes || 20) * 60_000;
+    const baseUrl = this.streamSiteUrl;
+    const teamKey = game.teamKey;
+    const existing = (this.state.streams || []).find((stream) => stream.teamId === game.teamId);
+    const resolvedAt = existing?.streamResolvedAt ? new Date(existing.streamResolvedAt).getTime() : 0;
+    const currentUrl = existing?.streamUrl || "";
+
+    if (!baseUrl) {
+      this.patchStream(game, {
+        streamUrl: "",
+        streamResolvedAt: null,
+        streamError: "No stream site URL configured"
+      });
+      return;
+    }
+
+    if (this.streamResolveInFlight.has(teamKey) || Date.now() - Number(this.lastStreamResolveAttemptAt.get(teamKey) || 0) < refreshMs) {
       return;
     }
 
@@ -165,32 +225,45 @@ class YankeesScheduler {
     }
 
     try {
-      this.streamResolveInFlight = true;
-      this.lastStreamResolveAttemptAt = Date.now();
-      this.logger.info("Resolving Yankees stream link", { source: redactUrl(baseUrl) });
+      this.streamResolveInFlight.add(teamKey);
+      this.lastStreamResolveAttemptAt.set(teamKey, Date.now());
+      this.logger.info("Resolving favorite team stream link", { team: game.teamLabel, source: redactUrl(baseUrl) });
       const streamUrl = await resolveYankeesStreamLink({
         baseUrl,
-        searchText: this.config.streamSearchText || "Yankees",
-        patterns: this.config.streamLinkPatterns || DEFAULT_STREAM_LINK_PATTERNS
+        searchText: game.streamSearchText || game.teamLabel,
+        patterns: game.streamLinkPatterns || []
       });
-      this.publish({
+      this.patchStream(game, {
         streamUrl,
         streamResolvedAt: new Date().toISOString(),
-        streamError: null,
-        message: this.state.mode === "yankees" ? "Yankees stream resolved" : this.state.message
+        streamError: null
       });
-      this.logger.info("Yankees stream link resolved", { streamUrl: redactUrl(streamUrl) });
+      this.logger.info("Favorite team stream link resolved", { team: game.teamLabel, streamUrl: redactUrl(streamUrl) });
     } catch (error) {
-      this.logger.warn("Yankees stream link resolution failed", { error: error.message });
-      this.publish({
+      this.logger.warn("Favorite team stream link resolution failed", { team: game.teamLabel, error: error.message });
+      this.patchStream(game, {
         streamUrl: baseUrl,
         streamResolvedAt: null,
-        streamError: error.message,
-        message: this.state.mode === "yankees" ? "Yankees stream link unavailable; showing base page" : this.state.message
+        streamError: error.message
       });
     } finally {
-      this.streamResolveInFlight = false;
+      this.streamResolveInFlight.delete(teamKey);
     }
+  }
+
+  patchStream(game, patch) {
+    const streams = this.buildStreams([...this.state.activeGames, ...(this.state.mode === "preparing" ? this.state.games.filter((item) => item.playState === "preparing") : [])]);
+    const nextStreams = streams.map((stream) => stream.teamId === game.teamId ? { ...stream, ...patch } : stream);
+    const primary = nextStreams[0] || null;
+    this.publish({
+      streams: nextStreams,
+      streamUrl: primary?.streamUrl || "",
+      streamResolvedAt: primary?.streamResolvedAt || null,
+      streamError: primary?.streamError || null,
+      message: this.state.mode === "yankees" && patch.streamError
+        ? `${game.teamLabel} stream link unavailable; showing base page`
+        : this.state.message
+    });
   }
 
   publish(patch) {
@@ -200,7 +273,7 @@ class YankeesScheduler {
 }
 
 async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
-  if (!baseUrl) throw new Error("No Yankees stream site URL configured");
+  if (!baseUrl) throw new Error("No stream site URL configured");
   const urls = uniqueUrls([baseUrl]);
   let lastError = "";
 
@@ -221,7 +294,7 @@ async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
       const html = await response.text();
       const match = findYankeesStreamLink(html, url, searchText, patterns);
       if (match) return match.href;
-      lastError = `No Yankees link found on ${url}`;
+      lastError = `No ${searchText || "team"} link found on ${url}`;
     } catch (error) {
       if (error.name === "AbortError") {
         lastError = "Stream page request timed out";
@@ -233,12 +306,12 @@ async function resolveYankeesStreamLink({ baseUrl, searchText, patterns }) {
     }
   }
 
-  throw new Error(lastError || "No Yankees link found on stream page");
+  throw new Error(lastError || "No team link found on stream page");
 }
 
 function findYankeesStreamLink(html, baseUrl, searchText = "Yankees", patterns = []) {
   const configuredPatterns = Array.isArray(patterns) ? patterns : [];
-  const normalizedPatterns = [searchText, ...configuredPatterns, ...TEMPORARY_STREAM_LINK_PATTERNS]
+  const normalizedPatterns = [searchText, ...configuredPatterns]
     .filter(Boolean)
     .map((value) => normalizeText(value));
   const candidates = [];
@@ -274,9 +347,124 @@ function scoreStreamCandidate(text, hrefText, patterns) {
     if (text.includes(pattern)) score += 5;
     if (hrefText.includes(pattern)) score += 4;
   }
+  if (score <= 0) return 0;
   if (hrefText.includes("/mlb/")) score += 2;
   if (hrefText.includes("vs")) score += 1;
   return score;
+}
+
+function normalizeFavoriteTeams(config = {}) {
+  const configuredTeams = Array.isArray(config.teams) && config.teams.length
+    ? config.teams
+    : [{
+      id: "yankees",
+      label: "Yankees",
+      teamId: config.teamId || 147,
+      scheduleUrl: config.scheduleUrl,
+      streamSearchText: config.streamSearchText || "Yankees",
+      streamLinkPatterns: config.streamLinkPatterns || DEFAULT_FAVORITE_TEAMS[0].streamLinkPatterns
+    }];
+
+  return configuredTeams.map((team, index) => {
+    const defaults = DEFAULT_FAVORITE_TEAMS.find((item) => String(item.id) === String(team.id)) || {};
+    return {
+      ...defaults,
+      ...team,
+      id: String(team.id || defaults.id || `team-${index + 1}`),
+      label: String(team.label || defaults.label || team.name || `Team ${index + 1}`),
+      teamId: Number(team.teamId || defaults.teamId || config.teamId || 147),
+      priority: Number(team.priority || index + 1),
+      scheduleUrl: team.scheduleUrl || defaults.scheduleUrl || config.scheduleUrl || "",
+      streamSearchText: team.streamSearchText || defaults.streamSearchText || team.label || defaults.label || "Team",
+      streamLinkPatterns: Array.isArray(team.streamLinkPatterns)
+        ? team.streamLinkPatterns
+        : Array.isArray(defaults.streamLinkPatterns)
+          ? defaults.streamLinkPatterns
+          : []
+    };
+  }).sort((a, b) => a.priority - b.priority);
+}
+
+function buildScheduleUrl(config, team, dateText) {
+  const template = team.scheduleUrl || config.scheduleUrl || "";
+  return template
+    .replace("{date}", dateText)
+    .replace("{teamId}", String(team.teamId));
+}
+
+function withGameWindow(game, config, now = new Date()) {
+  const startBufferMs = Number(config.gameStartBufferMinutes || 0) * 60_000;
+  const endBufferMs = Number(config.gameEndBufferMinutes || 45) * 60_000;
+  const prepareMs = Number(config.prepareBeforeGameMinutes || 10) * 60_000;
+  const assumedDurationMs = Number(config.assumedGameDurationMinutes || 210) * 60_000;
+  const gameStart = new Date(game.startTime);
+  const windowStart = new Date(gameStart.getTime() - startBufferMs);
+  const prepareStart = new Date(windowStart.getTime() - prepareMs);
+  const windowEnd = new Date(gameStart.getTime() + assumedDurationMs + endBufferMs);
+  let playState = "upcoming";
+  if (now >= windowStart && now <= windowEnd && !isFinalStatus(game.status)) {
+    playState = "live";
+  } else if (now >= prepareStart && now < windowStart) {
+    playState = "preparing";
+  } else if (now > windowEnd || isFinalStatus(game.status)) {
+    playState = "ended";
+  }
+
+  return {
+    ...game,
+    playState,
+    localStartTimeLabel: formatTime(gameStart),
+    prepareStart: prepareStart.toISOString(),
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString()
+  };
+}
+
+function parseSchedule(body, dateText, team = DEFAULT_FAVORITE_TEAMS[0]) {
+  try {
+    const json = JSON.parse(body);
+    const games = (json.dates || []).flatMap((day) => day.games || []);
+    const game = games[0];
+    if (!game) return null;
+    return decorateGame({
+      source: "schedule-json",
+      date: dateText,
+      gamePk: game.gamePk,
+      startTime: game.gameDate,
+      status: game.status?.detailedState || game.status?.abstractGameState || "Scheduled",
+      awayTeam: game.teams?.away?.team?.name || "Away",
+      homeTeam: game.teams?.home?.team?.name || "Home"
+    }, team);
+  } catch (_) {
+    return parseHtmlSchedule(body, dateText, team);
+  }
+}
+
+function parseHtmlSchedule(body, dateText, team = DEFAULT_FAVORITE_TEAMS[0]) {
+  const teamNearTime = body.match(new RegExp(`${escapeRegExp(team.label)}[\\s\\S]{0,500}?(\\d{1,2}:\\d{2}\\s*[AP]M)`, "i"));
+  if (!teamNearTime) return null;
+  const startTime = new Date(`${dateText} ${teamNearTime[1]}`);
+  if (Number.isNaN(startTime.getTime())) return null;
+  return decorateGame({
+    source: "schedule-html",
+    date: dateText,
+    startTime: startTime.toISOString(),
+    status: "Scheduled",
+    awayTeam: team.label,
+    homeTeam: "Opponent"
+  }, team);
+}
+
+function decorateGame(game, team) {
+  return {
+    ...game,
+    teamKey: team.id,
+    teamId: team.teamId,
+    teamLabel: team.label,
+    priority: team.priority || 99,
+    streamSearchText: team.streamSearchText,
+    streamLinkPatterns: team.streamLinkPatterns
+  };
 }
 
 function stripTags(value) {
@@ -304,41 +492,6 @@ function uniqueUrls(urls) {
   return [...new Set(urls.filter(Boolean))];
 }
 
-function parseSchedule(body, dateText) {
-  try {
-    const json = JSON.parse(body);
-    const games = (json.dates || []).flatMap((day) => day.games || []);
-    const game = games[0];
-    if (!game) return null;
-    return {
-      source: "schedule-json",
-      date: dateText,
-      gamePk: game.gamePk,
-      startTime: game.gameDate,
-      status: game.status?.detailedState || game.status?.abstractGameState || "Scheduled",
-      awayTeam: game.teams?.away?.team?.name || "Away",
-      homeTeam: game.teams?.home?.team?.name || "Home"
-    };
-  } catch (_) {
-    return parseHtmlSchedule(body, dateText);
-  }
-}
-
-function parseHtmlSchedule(body, dateText) {
-  const yankeesNearTime = body.match(/Yankees[\s\S]{0,500}?(\d{1,2}:\d{2}\s*[AP]M)/i);
-  if (!yankeesNearTime) return null;
-  const startTime = new Date(`${dateText} ${yankeesNearTime[1]}`);
-  if (Number.isNaN(startTime.getTime())) return null;
-  return {
-    source: "schedule-html",
-    date: dateText,
-    startTime: startTime.toISOString(),
-    status: "Scheduled",
-    awayTeam: "Yankees",
-    homeTeam: "Opponent"
-  };
-}
-
 function isFinalStatus(status = "") {
   return /final|completed|game over/i.test(status);
 }
@@ -363,9 +516,15 @@ function formatTime(date) {
   }).format(date);
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 module.exports = {
+  DEFAULT_FAVORITE_TEAMS,
   YankeesScheduler,
   findYankeesStreamLink,
+  normalizeFavoriteTeams,
   parseSchedule,
   resolveYankeesStreamLink
 };

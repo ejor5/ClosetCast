@@ -1143,6 +1143,73 @@ webview {
   background: #020304;
 }
 
+.stream-views {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.stream-count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stream-count-3,
+.stream-count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stream-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #020304;
+}
+
+.stream-tile-label {
+  position: absolute;
+  z-index: 2;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(7, 8, 11, 0.7);
+  backdrop-filter: blur(14px);
+}
+
+.stream-tile-label span {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.stream-tile-label strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-tile.stream-unavailable::after {
+  content: attr(data-status);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--ink);
+  text-align: center;
+  background: rgba(4, 6, 9, 0.78);
+  font-weight: 500;
+}
+
 .winddown-panel {
   grid-area: winddown;
   min-height: 0;

@@ -63,6 +63,7 @@ const elements = {
   settingsPanel: document.querySelector("#settingsPanel"),
   fullscreenToggle: document.querySelector("#fullscreenToggle"),
   testStreamFullscreen: document.querySelector("#testStreamFullscreen"),
+  testStreamLink: document.querySelector("#testStreamLink"),
   refreshAmbient: document.querySelector("#refreshAmbient"),
   refreshSchedule: document.querySelector("#refreshSchedule"),
   openConfig: document.querySelector("#openConfig"),
@@ -374,6 +375,8 @@ function renderStreamViews(streams) {
       });
       view.addEventListener("did-finish-load", () => {
         tile.classList.remove("stream-unavailable");
+        scheduleStreamGameLinkClick(key, view, stream, 600);
+        scheduleStreamGameLinkClick(key, view, stream, 2200);
         [0, 1000, 3000, 8000, 14000].forEach((delay) => scheduleYankeesFullscreenClick(key, view, delay));
       });
       tile.append(label, view);
@@ -410,6 +413,177 @@ function scheduleYankeesFullscreenClick(key, view, delayMs = 0) {
     if (token !== state.streamAutomationToken) return;
     clickYankeesFullscreenIfVisible(key, view).catch(() => {});
   }, delayMs);
+}
+
+function scheduleStreamGameLinkClick(key, view, stream, delayMs = 0) {
+  const token = state.streamAutomationToken;
+  setTimeout(() => {
+    if (token !== state.streamAutomationToken) return;
+    clickStreamGameLinkIfNeeded(key, view, stream).catch(() => {});
+  }, delayMs);
+}
+
+async function clickStreamGameLinkIfNeeded(key, view, stream, force = false) {
+  if (!view?.src || elements.streamPanel.classList.contains("hidden")) return null;
+  if (!force && !isLikelyBaseStreamPage(view.src, stream.streamUrl)) return null;
+  const searchText = stream.streamSearchText || stream.teamLabel || "Yankees";
+  const patterns = stream.streamLinkPatterns || state.config.yankees.streamLinkPatterns || [];
+  const result = await view.executeJavaScript(`(${clickGameLinkInPage.toString()})(${JSON.stringify(searchText)}, ${JSON.stringify(patterns)})`, true);
+  if (result?.clicked) {
+    state.loadedStreamUrls[key] = "";
+    state.streamAutomationToken += 1;
+  }
+  return result;
+}
+
+function isLikelyBaseStreamPage(currentUrl, streamUrl) {
+  try {
+    const current = new URL(currentUrl);
+    const target = new URL(streamUrl || currentUrl);
+    return current.origin === target.origin && normalizePath(current.pathname) === normalizePath(target.pathname);
+  } catch (_) {
+    return true;
+  }
+}
+
+function normalizePath(value) {
+  return String(value || "/").replace(/\/+$/, "") || "/";
+}
+
+function clickGameLinkInPage(searchText, patterns) {
+  const normalizedPatterns = buildPatterns(searchText, patterns);
+  const candidates = collectCandidates(document)
+    .map((candidate) => {
+      const text = normalize([candidate.text, candidate.label, candidate.href].filter(Boolean).join(" "));
+      const hrefText = normalize(candidate.href);
+      const score = scoreCandidate(text, hrefText, normalizedPatterns);
+      return { ...candidate, score };
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  if (!best) return { clicked: false, reason: "No matching game link found", candidates: candidates.length };
+  const clickable = best.element?.closest?.("a, button, [role='button']") || best.element;
+  if (clickable) {
+    clickable.scrollIntoView?.({ block: "center", inline: "center" });
+    clickable.click();
+    return { clicked: true, href: best.href, score: best.score, source: best.source || "" };
+  }
+  if (best.href) {
+    window.location.href = best.href;
+    return { clicked: true, href: best.href, score: best.score, source: "location" };
+  }
+  return { clicked: false, reason: "Best match was not clickable", candidates: candidates.length };
+
+  function collectCandidates(root, depth = 0) {
+    if (!root || depth > 3) return [];
+    const nodes = [];
+    const seen = new Set();
+    const add = (element, href, text, label, source) => {
+      const cleanHref = String(href || "").trim();
+      const cleanText = String(text || "").trim();
+      const key = `${source}|${cleanHref}|${cleanText}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      nodes.push({ element, href: cleanHref, text: cleanText, label: label || "", source });
+    };
+    const selector = [
+      "a[href]",
+      "button",
+      "[role='button']",
+      "[data-href]",
+      "[data-url]",
+      "[data-link]",
+      "[data-target]",
+      "[data-src]",
+      "[onclick]",
+      "[aria-label]",
+      "[title]"
+    ].join(", ");
+    try {
+      root.querySelectorAll(selector).forEach((element) => {
+        const label = [
+          element.getAttribute("aria-label"),
+          element.getAttribute("title"),
+          element.getAttribute("data-title"),
+          element.getAttribute("data-tooltip"),
+          element.textContent
+        ].filter(Boolean).join(" ");
+        ["href", "data-href", "data-url", "data-link", "data-target", "data-src"].forEach((attr) => {
+          const value = element.getAttribute(attr);
+          if (value) add(element, absoluteUrl(value), element.textContent, label, attr);
+        });
+        extractUrls(element.getAttribute("onclick") || "").forEach((href) => add(element, absoluteUrl(href), element.textContent, label, "onclick"));
+        if (!element.getAttribute("href")) add(element, "", element.textContent, label, "label");
+      });
+      root.querySelectorAll("*").forEach((element) => {
+        if (element.shadowRoot) {
+          for (const item of collectCandidates(element.shadowRoot, depth + 1)) nodes.push(item);
+        }
+      });
+    } catch (_) {
+      return nodes;
+    }
+    extractUrls(document.documentElement.innerHTML).forEach((href) => add(null, absoluteUrl(href), href, "", "html"));
+    return nodes;
+  }
+
+  function scoreCandidate(text, hrefText, patternList) {
+    let score = 0;
+    for (const pattern of patternList) {
+      if (!pattern) continue;
+      if (text.includes(pattern)) score += 5;
+      if (hrefText.includes(pattern)) score += 4;
+    }
+    if (score <= 0) return 0;
+    if (hrefText.includes("/mlb/")) score += 2;
+    if (hrefText.includes("-vs-") || text.includes("-vs-")) score += 3;
+    if (hrefText.includes("live") || text.includes("live")) score += 1;
+    if (/\b(highlights?|recap|preview|odds|tickets?|schedule|standings|news|stats)\b/.test(`${text} ${hrefText}`)) score -= 5;
+    return Math.max(0, score);
+  }
+
+  function buildPatterns(value, list = []) {
+    return [...new Set([value, ...list].filter(Boolean).flatMap((item) => {
+      const normalized = normalize(item);
+      return [
+        normalized,
+        normalized.replace(/-/g, ""),
+        normalized.replace(/^new-york-/, "ny-"),
+        normalized.replace(/^los-angeles-/, "la-"),
+        normalized.replace(/^san-francisco-/, "sf-")
+      ];
+    }).filter(Boolean))];
+  }
+
+  function normalize(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&amp;/g, "&")
+      .replace(/\\u002f/gi, "/")
+      .replace(/\\\//g, "/")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function extractUrls(value) {
+    const urls = [];
+    const pattern = /https?:\/\/[^\s"'<>\\]+|\/mlb\/[a-z0-9][a-z0-9/_-]*/gi;
+    let match = pattern.exec(String(value || ""));
+    while (match) {
+      urls.push(match[0].replace(/[),.;]+$/g, ""));
+      match = pattern.exec(String(value || ""));
+    }
+    return urls;
+  }
+
+  function absoluteUrl(value) {
+    try {
+      return new URL(String(value || ""), window.location.href).toString();
+    } catch (_) {
+      return String(value || "");
+    }
+  }
 }
 
 async function clickYankeesFullscreenIfVisible(key, view) {
@@ -554,6 +728,41 @@ async function testStreamFullscreenNow() {
     setTimeout(() => {
       elements.testStreamFullscreen.disabled = false;
       elements.testStreamFullscreen.textContent = originalLabel;
+    }, 1800);
+  }
+}
+
+async function testStreamLinkNow() {
+  const originalLabel = elements.testStreamLink.textContent;
+  const views = [...elements.streamViews.querySelectorAll("webview")].filter((view) => view.src);
+  const streams = getFavoriteStreams(state.yankees || {});
+  elements.testStreamLink.disabled = true;
+  elements.testStreamLink.textContent = "Testing...";
+  try {
+    if (!views.length) {
+      elements.testStreamLink.textContent = "No stream";
+      return;
+    }
+    const results = [];
+    for (const view of views) {
+      const key = view.dataset.streamKey || "stream";
+      const stream = streams.find((item) => item.teamKey === key) || {
+        teamKey: key,
+        teamLabel: "Yankees",
+        streamSearchText: state.config.yankees.streamSearchText,
+        streamLinkPatterns: state.config.yankees.streamLinkPatterns,
+        streamUrl: view.src
+      };
+      results.push(await clickStreamGameLinkIfNeeded(key, view, stream, true));
+    }
+    const successes = results.filter((result) => result?.clicked).length;
+    elements.testStreamLink.textContent = successes ? `Clicked ${successes}` : "No match";
+  } catch (_) {
+    elements.testStreamLink.textContent = "Failed";
+  } finally {
+    setTimeout(() => {
+      elements.testStreamLink.disabled = false;
+      elements.testStreamLink.textContent = originalLabel;
     }, 1800);
   }
 }
@@ -877,6 +1086,7 @@ function bindEvents() {
   elements.settingsClose.addEventListener("click", () => elements.settingsPanel.classList.add("hidden"));
   elements.fullscreenToggle.addEventListener("click", () => window.closetCast.setFullscreen(true));
   elements.testStreamFullscreen.addEventListener("click", testStreamFullscreenNow);
+  elements.testStreamLink.addEventListener("click", testStreamLinkNow);
   elements.refreshAmbient.addEventListener("click", refreshAmbientNow);
   elements.refreshSchedule.addEventListener("click", () => window.closetCast.refreshSchedule());
   elements.openConfig.addEventListener("click", () => window.closetCast.openConfigFolder());

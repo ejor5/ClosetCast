@@ -189,6 +189,8 @@ class YankeesScheduler {
         streamUrl: existing?.streamUrl || this.streamSiteUrl,
         streamResolvedAt: existing?.streamResolvedAt || null,
         streamError: existing?.streamError || null,
+        streamSearchText: game.streamSearchText || game.teamLabel,
+        streamLinkPatterns: game.streamLinkPatterns || [],
         game
       };
     });

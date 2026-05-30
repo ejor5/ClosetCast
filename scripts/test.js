@@ -155,8 +155,10 @@ function testRendererCameraReconnects() {
   assert(stylesSource.includes("grid-template-rows: minmax(58vh, 1fr) auto auto"), "Yankees narrow layout should keep the stream at the top");
   assert(indexSource.includes("id=\"streamViews\""), "stream panel should support multiple live game webviews");
   assert(indexSource.includes("id=\"testStreamFullscreen\""), "settings should expose a manual stream fullscreen tester");
+  assert(indexSource.includes("id=\"testStreamLink\""), "settings should expose a manual stream link tester");
   assert(rendererSource.includes("stream-count-${Math.min(streams.length, 4)}"), "renderer should switch the stream grid when multiple games are live");
   assert(rendererSource.includes("collectCandidates(document)") && rendererSource.includes("requestFullscreen"), "fullscreen tester should probe controls and fall back to requestFullscreen");
+  assert(rendererSource.includes("clickStreamGameLinkIfNeeded") && rendererSource.includes("clickGameLinkInPage"), "stream page should click matching game links when resolver lands on a home page");
   assert(stylesSource.includes(".stream-count-2"), "styles should split two simultaneous favorite streams");
   assert(indexSource.includes("data-test-mode=\"ambient\""), "settings should expose a test mode picker");
   assert(indexSource.includes("id=\"refreshAmbient\""), "settings should expose a manual ambient YouTube picker");
@@ -166,7 +168,6 @@ function testRendererCameraReconnects() {
   assert(!setDebugModeSource.includes("state.config.debug.enabled"), "settings test modes should work outside debug config");
   assert(rendererSource.includes("clickYankeesFullscreenIfVisible"), "favorite stream automation should be limited to visible fullscreen controls");
   assert(!rendererSource.includes("MouseEvent"), "Yankees page automation should not synthesize mouse movement");
-  assert(!rendererSource.includes("clickGameLink"), "Yankees page automation should not click stream-site game links");
 }
 
 function testYankeesStreamResolver() {

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClosetCast</title>
+    <meta name="description" content="Windows kiosk closet monitor for RTSP cameras, calendars, weather, Yankees mode, and ambient media.">
+    <link rel="stylesheet" href="./styles-landing.css">
+  </head>
+  <body>
+    <header class="hero">
+      <p class="brand">ClosetCast</p>
+      <p class="tagline">A closet laptop that watches the yard.</p>
+      <p class="lede">Five RTSP cameras, weather, Apple Calendar, Yankees mode, and afternoon ambiance — fullscreen on an old Windows machine.</p>
+      <div class="cta-row">
+        <a class="button button-primary" href="./demo/">View demo</a>
+        <a class="button" href="https://github.com/ejor5/ClosetCast">GitHub</a>
+        <a class="button" href="#install">Install</a>
+      </div>
+    </header>
+
+    <section id="install" class="section">
+      <h2>Install on the closet laptop</h2>
+      <p>One PowerShell command downloads ClosetCast, checks Node and FFmpeg, and opens the setup wizard.</p>
+      <pre class="install">powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/ejor5/ClosetCast/main/Install-ClosetCast.ps1 | iex"</pre>
+    </section>
+
+    <section class="section">
+      <h2>What it does</h2>
+      <ul class="features">
+        <li>Five RTSP camera tiles with focus, split, grid, and five-camera layouts</li>
+        <li>Weather, traffic, and up to three Apple Calendar feeds</li>
+        <li>Yankees auto mode and after-noon YouTube ambiance</li>
+        <li>Wind-down reminder and Windows wake/sleep schedule</li>
+      </ul>
+    </section>
+
+    <p class="footer">
+      ClosetCast runs as a local Electron app.
+      <a href="./demo/">The demo</a> uses mock data — no live cameras.
+    </p>
+  </body>
+</html>

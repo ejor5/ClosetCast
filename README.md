@@ -2,6 +2,8 @@
 
 ClosetCast is a lightweight Windows kiosk app for an old laptop in a closet: five RTSP cameras, weather, Apple Calendar, Yankees mode, wind-down mode, and Windows wake/sleep automation.
 
+**Site:** [https://ejor5.github.io/ClosetCast/](https://ejor5.github.io/ClosetCast/) (landing page + static dashboard demo)
+
 The Yankees stream site URL is private/local config. Put your preferred site URL in `config.json`; the public repo keeps that value blank.
 
 ## What It Does

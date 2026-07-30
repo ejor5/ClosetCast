@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="640" viewBox="0 0 560 640">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#b94736" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#3a1d16"/>
+    </linearGradient>
+  </defs>
+  <rect width="560" height="640" fill="url(#g)"/>
+  <rect x="24" y="24" width="512" height="592" rx="18" fill="none" stroke="#b94736" stroke-opacity="0.45" stroke-width="2"/>
+  <circle cx="280" cy="250" r="72" fill="#b94736" fill-opacity="0.22" stroke="#b94736" stroke-width="3"/>
+  <circle cx="280" cy="250" r="28" fill="#b94736" fill-opacity="0.55"/>
+  <text x="280" y="400" text-anchor="middle" fill="#fff8df" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="42" font-weight="700">Garage</text>
+  <text x="280" y="448" text-anchor="middle" fill="#d6c59b" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="22">Mock camera feed</text>
+</svg>
